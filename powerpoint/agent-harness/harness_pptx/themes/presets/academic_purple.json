@@ -1,0 +1,47 @@
+{
+  "name": "academic_purple",
+  "description": "Purple academic design system — refined for research paper presentations with section tags, numbered contents slides, and formula-dense layouts.",
+  "colors": {
+    "primary": "#6F2F9F",
+    "accent": "#6F2F9F",
+    "background": "#FFFFFF",
+    "text": "#3B3838",
+    "muted": "#AFABAB",
+    "surface": "#E9EBF5",
+    "border": "#C8C8D2",
+    "success": "#2E7D32",
+    "warning": "#E67E22",
+    "error": "#C0392B"
+  },
+  "fonts": {
+    "title": "Calibri",
+    "title_zh": "Microsoft YaHei",
+    "body": "Calibri",
+    "body_zh": "Microsoft YaHei",
+    "mono": "Consolas"
+  },
+  "spacing": {
+    "xs": 4,
+    "sm": 8,
+    "md": 16,
+    "lg": 24,
+    "xl": 36,
+    "xxl": 48
+  },
+  "radii": {
+    "none": 0,
+    "sm": 2,
+    "md": 6,
+    "lg": 12
+  },
+  "shadows": {
+    "none": "none",
+    "sm": "none",
+    "md": "none",
+    "lg": "none"
+  },
+  "chart_palette": [
+    "#6F2F9F", "#3B3838", "#AFABAB", "#C8C8D2",
+    "#E9EBF5", "#2E7D32", "#E67E22", "#C0392B"
+  ]
+}

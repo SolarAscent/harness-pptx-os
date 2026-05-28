@@ -149,8 +149,107 @@ class ElementRenderer:
         bbox = el.bbox
         if bbox is None:
             raise ValueError(f"Formula element {el.id} has no bbox")
+
+        # If pre-rendered image path is set, use it directly
+        if el.image_path:
+            return self._backend.add_image(
+                slide, bbox.x, bbox.y, bbox.w, bbox.h, el.image_path, "contain",
+            )
+
+        # Try to render LaTeX to PNG via matplotlib mathtext
+        try:
+            import tempfile
+            import os
+            from pathlib import Path
+
+            import matplotlib
+            matplotlib.use("Agg")
+            import matplotlib.pyplot as plt
+
+            formula = el.latex.strip()
+            if formula.startswith("$") and formula.endswith("$"):
+                formula = formula[1:-1]
+            if formula.startswith("\\(") and formula.endswith("\\)"):
+                formula = formula[2:-2]
+
+            font_size = el.style.font_size or 18
+            font_color = self._resolve_color(el.style.font_color, "#000000")
+            bg_color = self._resolve_color(
+                el.style.fill_color or el.style.font_color, "#FFFFFF"
+            )
+            if bg_color == font_color:
+                bg_color = "#FFFFFF"
+
+            # Parse colors
+            def _hex_to_rgb(hex_str):
+                h = hex_str.lstrip("#")
+                return tuple(int(h[i:i+2], 16) for i in (0, 2, 4))
+
+            fr, fg, fb = _hex_to_rgb(font_color)
+            br, bg, bb = _hex_to_rgb(bg_color)
+
+            dpi = el.metadata.get("dpi", 200) if el.metadata else 200
+            fig, ax = plt.subplots(figsize=(0.01, 0.01), dpi=dpi)
+            text = ax.text(
+                0.5, 0.5, f"${formula}$",
+                fontsize=font_size,
+                color=(fr/255, fg/255, fb/255),
+                ha="center", va="center",
+                transform=ax.transAxes,
+            )
+            fig.canvas.draw()
+            bbox_inches = text.get_window_extent(
+                renderer=fig.canvas.get_renderer()
+            )
+            bbox_inches = bbox_inches.transformed(
+                fig.transFigure.inverted()
+            )
+            plt.close(fig)
+
+            fig, ax = plt.subplots(
+                figsize=(bbox_inches.width * 1.15, bbox_inches.height * 1.3),
+                dpi=dpi,
+                facecolor=(br/255, bg/255, bb/255),
+            )
+            ax.axis("off")
+            ax.text(
+                0.5, 0.5, f"${formula}$",
+                fontsize=font_size,
+                color=(fr/255, fg/255, fb/255),
+                ha="center", va="center",
+                transform=ax.transAxes,
+            )
+
+            fd, tmp_path = tempfile.mkstemp(suffix=".png", prefix="latex_")
+            os.close(fd)
+            fig.savefig(
+                tmp_path, dpi=dpi, bbox_inches="tight",
+                facecolor=(br/255, bg/255, bb/255),
+                edgecolor="none",
+            )
+            plt.close(fig)
+
+            result = self._backend.add_image(
+                slide, bbox.x, bbox.y, bbox.w, bbox.h, tmp_path, "contain",
+            )
+            try:
+                os.unlink(tmp_path)
+            except OSError:
+                pass
+            return result
+
+        except ImportError:
+            pass
+        except Exception:
+            pass
+
+        # Fallback: render as plain text
         label = f"${el.latex}$" if el.display else f"\\({el.latex}\\)"
-        style = TextStyle(font_name="Consolas", font_size=14, font_color="#000000")
+        style = TextStyle(
+            font_name="Consolas",
+            font_size=el.style.font_size or 14,
+            font_color=self._resolve_color(el.style.font_color, "#000000"),
+        )
         return self._backend.add_text_box(
             slide, bbox.x, bbox.y, bbox.w, bbox.h, label, style,
         )

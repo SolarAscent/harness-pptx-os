@@ -1,0 +1,11 @@
+{
+  "name": "harness-pptx",
+  "version": "0.2.0",
+  "description": "PowerPoint automation harness for autonomous PPT generation via AppleScript on macOS. Includes LaTeX formula rendering, 25 slide type templates, SceneGraph QA/repair pipeline, and a complete design token system.",
+  "author": "SolarAscent",
+  "homepage": "https://github.com/SolarAscent/harness-pptx-os",
+  "skills": [
+    "harness-pptx",
+    "pptx-orchestrator"
+  ]
+}

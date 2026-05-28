@@ -840,7 +840,90 @@ class PowerPointBackend:
                 f"set line weight to {float(element.get('line_weight', 1.0))}",
                 "end tell",
             ]
+        if kind == "table":
+            return self._table_script(element, var, idx)
         return []
+
+    def _table_script(self, element: dict[str, Any], var_base: str, idx: int) -> list[str]:
+        """Generate AppleScript for a table-like grid using rects + text boxes."""
+        left = float(element.get("left", 50))
+        top = float(element.get("top", 100))
+        table_w = float(element.get("width", 860))
+        row_h = float(element.get("row_height", 26))
+        font_size = max(1, int(round(float(element.get("font_size", 12)))))
+        header_bg = element.get("header_bg", "111,47,159")
+        cell_bg = element.get("cell_bg", "255,255,255")
+        alt_bg = element.get("alt_bg", "245,245,248")
+        line_color = element.get("line_color", "200,200,210")
+        header_color = element.get("header_color", "255,255,255")
+        text_color = element.get("text_color", "0,0,0")
+        font_name = element.get("font_name", "Calibri")
+        columns = element.get("columns", [])
+        headers = element.get("headers", [])
+        rows = element.get("rows", [])
+
+        if not columns:
+            return []
+        col_pcts = [float(c.get("width_pct", 50)) for c in columns]
+
+        all_lines = []
+        ei = 0
+
+        def _mk_rect(l, t, w, h, fill):
+            nonlocal ei; ei += 1
+            v = f"{var_base}_r{ei}"
+            return [
+                f"set {v} to make new shape at end of theSlide",
+                f"set auto shape type of {v} to autoshape rectangle",
+                f"set left position of {v} to {l}",
+                f"set top of {v} to {t}",
+                f"set width of {v} to {w}",
+                f"set height of {v} to {h}",
+                *_fill_block(v, fill),
+                f"tell line format of {v}",
+                f"set fore color to {_clist(*_parse_color(line_color))}",
+                f"set line weight to 0.5",
+                "end tell",
+            ]
+
+        def _mk_text(l, t, w, h, txt, fc):
+            nonlocal ei; ei += 1
+            v = f"{var_base}_t{ei}"
+            return [
+                f"set {v} to make new text box at end of theSlide",
+                f"set left position of {v} to {l}",
+                f"set top of {v} to {t}",
+                f"set width of {v} to {w}",
+                f"set height of {v} to {h}",
+                f"set content of text range of text frame of {v} to {_escape(str(txt))}",
+                f"set font size of font of text range of text frame of {v} to {font_size}",
+                f"set bold of font of text range of text frame of {v} to true",
+                f"set font name of font of text range of text frame of {v} to {_escape(font_name)}",
+                *_font_color_block(v, fc),
+            ]
+
+        # Header row
+        if headers:
+            cx = left
+            col_widths = [int(table_w * pct / 100) for pct in col_pcts]
+            for ci, (hdr, cw) in enumerate(zip(headers, col_widths)):
+                all_lines.extend(_mk_rect(cx, top, cw, row_h, header_bg))
+                all_lines.extend(_mk_text(cx + 3, top + 2, cw - 6, row_h - 4, hdr, header_color))
+                cx += cw
+
+        # Data rows
+        for ri, row in enumerate(rows):
+            ry = top + (ri + 1) * row_h
+            bg = alt_bg if ri % 2 == 1 else cell_bg
+            cx = left
+            col_widths = [int(table_w * pct / 100) for pct in col_pcts]
+            cells = row if isinstance(row, list) else row.get("cells", [])
+            for ci, (cell, cw) in enumerate(zip(cells, col_widths)):
+                all_lines.extend(_mk_rect(cx, ry, cw, row_h, bg))
+                all_lines.extend(_mk_text(cx + 3, ry + 2, cw - 6, row_h - 4, str(cell) if cell else "", text_color))
+                cx += cw
+
+        return all_lines
 
     def add_line_shape(
         self, slide_index: int,
