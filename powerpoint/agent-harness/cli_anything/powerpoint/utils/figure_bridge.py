@@ -79,7 +79,8 @@ class FigureBridge:
         # Publication-quality rcParams
         plt.rcParams.update({
             "font.family": "sans-serif",
-            "font.sans-serif": ["Arial", "Helvetica", "DejaVu Sans", "sans-serif"],
+            "font.sans-serif": ["PingFang SC", "Heiti SC", "STHeiti", "Arial",
+                                "Helvetica", "DejaVu Sans", "sans-serif"],
             "font.size": 10,
             "axes.titlesize": 13,
             "axes.labelsize": 10,
@@ -326,7 +327,8 @@ class FigureBridge:
             matrix = np.random.rand(6, 8) * 100
 
         im = ax.imshow(matrix, cmap="YlOrRd", aspect="auto")
-        cbar = plt.colorbar(im, ax=ax, shrink=0.85)
+        fig = ax.get_figure()
+        cbar = fig.colorbar(im, ax=ax, shrink=0.85)
         cbar.ax.tick_params(labelsize=7)
         cbar.outline.set_visible(False)
 
@@ -344,6 +346,7 @@ class FigureBridge:
             ax.set_ylabel(ylabel)
 
     def _draw_radar(self, ax, data, theme, title, xlabel, ylabel):
+        import matplotlib.pyplot as plt
         import numpy as np
 
         categories = [d.get("label", f"Dim {i+1}") for i, d in enumerate(data)]
@@ -353,9 +356,9 @@ class FigureBridge:
         values += values[:1]
         angles += angles[:1]
 
-        ax = plt.gca()
-        ax.set_facecolor(theme["bg"])
-        ax = plt.subplot(111, polar=True)
+        fig = ax.get_figure()
+        ax.remove()
+        ax = fig.add_subplot(111, polar=True)
         ax.set_facecolor(theme["bg"])
 
         ax.fill(angles, values, alpha=0.25, color=theme["palette"][0])
@@ -366,4 +369,4 @@ class FigureBridge:
         ax.set_yticklabels([])
         ax.spines["polar"].set_color(theme["grid"])
         if title:
-            plt.title(title, fontweight="bold", pad=20, color=theme["fg"])
+            ax.set_title(title, fontweight="bold", pad=20, color=theme["fg"])

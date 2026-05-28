@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import platform
 import subprocess
+import tempfile
 from pathlib import Path
 from typing import Any
 
@@ -47,6 +48,27 @@ def _font_color_block(shape_var: str, color: str) -> str:
     """Generate AppleScript line to set font color."""
     r, g, b = _parse_color(color)
     return f"set font color of font of text range of text frame of {shape_var} to {_clist(r, g, b)}"
+
+
+def _parse_tab_records(output: str, fields: list[str]) -> list[dict[str, Any]]:
+    records: list[dict[str, Any]] = []
+    for line in output.splitlines():
+        if not line.strip():
+            continue
+        parts = line.split("\t")
+        records.append({field: parts[idx] if idx < len(parts) else "" for idx, field in enumerate(fields)})
+    return records
+
+
+def _coerce_numbers(row: dict[str, Any], names: list[str]) -> dict[str, Any]:
+    for name in names:
+        value = row.get(name)
+        try:
+            number = float(value)
+            row[name] = int(number) if number.is_integer() else number
+        except (TypeError, ValueError, AttributeError):
+            pass
+    return row
 
 
 # ── Enums ────────────────────────────────────────────────────────────
@@ -140,6 +162,15 @@ class PowerPointBackend:
         )
         return {"status": "ok", "presentation": "Untitled"}
 
+    def set_page_size(self, width: float = 960, height: float = 540) -> dict[str, Any]:
+        self.run_script(
+            'tell application "Microsoft PowerPoint"\n'
+            "set deckRef to active presentation\n"
+            f"set slide width of page setup of deckRef to {width}\n"
+            "end tell"
+        )
+        return {"status": "ok", "width": width, "height": height}
+
     def open_presentation(self, path: str) -> dict[str, Any]:
         full_path = str(Path(path).expanduser().resolve())
         name = self.run_script(
@@ -169,6 +200,22 @@ class PowerPointBackend:
             "end tell"
         )
         return {"status": "ok", "path": full_path}
+
+    def export_png(self, path: str) -> dict[str, Any]:
+        full_path = str(Path(path).expanduser().resolve())
+        Path(full_path).parent.mkdir(parents=True, exist_ok=True)
+        with tempfile.TemporaryDirectory(prefix="cli-anything-ppt-") as tmpdir:
+            pdf_path = str(Path(tmpdir) / "preview.pdf")
+            self.export_pdf(pdf_path)
+            proc = subprocess.run(
+                ["sips", "-s", "format", "png", pdf_path, "--out", full_path],
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+            if proc.returncode != 0:
+                raise RuntimeError(proc.stderr.strip() or proc.stdout.strip())
+        return {"status": "ok", "path": full_path, "note": "Rendered from exported PDF preview"}
 
     def close(self, saving: bool = True) -> dict[str, Any]:
         flag = "yes" if saving else "no"
@@ -200,6 +247,16 @@ class PowerPointBackend:
             "end tell"
         )
         return {"status": "ok", "slide_index": int(count), "layout": layout}
+
+    def ensure_slide_count(self, slide_count: int) -> dict[str, Any]:
+        current = self.get_slide_count()["slide_count"]
+        while current < slide_count:
+            self.add_slide("blank")
+            current += 1
+        while current > slide_count:
+            self.delete_slide(current)
+            current -= 1
+        return {"status": "ok", "slide_count": current}
 
     def delete_slide(self, slide_index: int) -> dict[str, Any]:
         self.run_script(
@@ -234,6 +291,25 @@ class PowerPointBackend:
         )
         return {"status": "ok", "slide_count": int(count)}
 
+    def list_slides(self) -> dict[str, Any]:
+        output = self.run_script(
+            'tell application "Microsoft PowerPoint"\n'
+            "set rowsOut to {}\n"
+            "repeat with i from 1 to count of slides of active presentation\n"
+            "set s to slide i of active presentation\n"
+            "set end of rowsOut to ((slide index of s as text) & tab & (count of shapes of s as text))\n"
+            "end repeat\n"
+            "set AppleScript's text item delimiters to linefeed\n"
+            "set joinedRows to rowsOut as text\n"
+            "set AppleScript's text item delimiters to \"\"\n"
+            "return joinedRows\n"
+            "end tell"
+        )
+        slides = _parse_tab_records(output, ["index", "shape_count"])
+        for slide in slides:
+            _coerce_numbers(slide, ["index", "shape_count"])
+        return {"status": "ok", "slides": slides}
+
     def go_to_slide(self, slide_index: int) -> dict[str, Any]:
         self.run_script(
             'tell application "Microsoft PowerPoint"\n'
@@ -241,6 +317,163 @@ class PowerPointBackend:
             "end tell"
         )
         return {"status": "ok", "current_slide": slide_index}
+
+    # ══════════════════════════════════════════════════════════════════
+    # Shape Inspection and Editing
+    # ══════════════════════════════════════════════════════════════════
+
+    def list_shapes(self, slide_index: int) -> dict[str, Any]:
+        output = self.run_script(
+            'tell application "Microsoft PowerPoint"\n'
+            f"set theSlide to slide {slide_index} of active presentation\n"
+            "set rowsOut to {}\n"
+            "repeat with i from 1 to count of shapes of theSlide\n"
+            "set shp to shape i of theSlide\n"
+            "set txt to \"\"\n"
+            "try\n"
+            "if has text frame of shp then set txt to content of text range of text frame of shp\n"
+            "end try\n"
+            "set txt to my _cliAnythingCleanText(txt)\n"
+            "set end of rowsOut to ((i as text) & tab & (name of shp as text) & tab & (shape type of shp as text) & tab & (left position of shp as text) & tab & (top of shp as text) & tab & (width of shp as text) & tab & (height of shp as text) & tab & (z order position of shp as text) & tab & txt)\n"
+            "end repeat\n"
+            "set AppleScript's text item delimiters to linefeed\n"
+            "set joinedRows to rowsOut as text\n"
+            "set AppleScript's text item delimiters to \"\"\n"
+            "return joinedRows\n"
+            "end tell\n"
+            "on _cliAnythingCleanText(t)\n"
+            "set oldDelims to AppleScript's text item delimiters\n"
+            "set AppleScript's text item delimiters to {return, linefeed, tab}\n"
+            "set parts to text items of (t as text)\n"
+            "set AppleScript's text item delimiters to \" \"\n"
+            "set cleaned to parts as text\n"
+            "set AppleScript's text item delimiters to oldDelims\n"
+            "return cleaned\n"
+            "end _cliAnythingCleanText"
+        )
+        shapes = _parse_tab_records(
+            output,
+            ["index", "name", "type", "left", "top", "width", "height", "z_order", "text"],
+        )
+        for shape in shapes:
+            _coerce_numbers(shape, ["index", "left", "top", "width", "height", "z_order"])
+        return {"status": "ok", "slide": slide_index, "shapes": shapes}
+
+    def get_shape(self, slide_index: int, shape_index: int) -> dict[str, Any]:
+        for shape in self.list_shapes(slide_index)["shapes"]:
+            if shape.get("index") == shape_index:
+                return {"status": "ok", "slide": slide_index, "shape": shape}
+        return {"status": "error", "error": f"Shape {shape_index} not found on slide {slide_index}"}
+
+    def set_shape_text(
+        self,
+        slide_index: int,
+        shape_index: int,
+        text: str,
+        font_size: int | None = None,
+        font_name: str = "",
+        font_color: str | None = None,
+        bold: bool | None = None,
+        italic: bool | None = None,
+    ) -> dict[str, Any]:
+        lines = [
+            'tell application "Microsoft PowerPoint"',
+            f"set shp to shape {shape_index} of slide {slide_index} of active presentation",
+            f"set content of text range of text frame of shp to {_escape(text)}",
+        ]
+        if font_size is not None:
+            lines.append(f"set font size of font of text range of text frame of shp to {font_size}")
+        if font_name:
+            lines.append(f"set font name of font of text range of text frame of shp to {_escape(font_name)}")
+        if font_color:
+            lines.append(_font_color_block("shp", font_color))
+        if bold is not None:
+            lines.append(f"set bold of font of text range of text frame of shp to {'true' if bold else 'false'}")
+        if italic is not None:
+            lines.append(f"set italic of font of text range of text frame of shp to {'true' if italic else 'false'}")
+        lines += ["return name of shp", "end tell"]
+        name = self.run_script("\n".join(lines))
+        return {"status": "ok", "slide": slide_index, "shape": shape_index, "name": name}
+
+    def update_shape(
+        self,
+        slide_index: int,
+        shape_index: int,
+        left: float | None = None,
+        top: float | None = None,
+        width: float | None = None,
+        height: float | None = None,
+        rotation: float | None = None,
+        name: str | None = None,
+    ) -> dict[str, Any]:
+        lines = [
+            'tell application "Microsoft PowerPoint"',
+            f"set shp to shape {shape_index} of slide {slide_index} of active presentation",
+        ]
+        if left is not None:
+            lines.append(f"set left position of shp to {left}")
+        if top is not None:
+            lines.append(f"set top of shp to {top}")
+        if width is not None:
+            lines.append(f"set width of shp to {width}")
+        if height is not None:
+            lines.append(f"set height of shp to {height}")
+        if rotation is not None:
+            lines.append(f"set rotation of shp to {rotation}")
+        if name:
+            lines.append(f"set name of shp to {_escape(name)}")
+        lines += ["return name of shp", "end tell"]
+        new_name = self.run_script("\n".join(lines))
+        return {"status": "ok", "slide": slide_index, "shape": shape_index, "name": new_name}
+
+    def delete_shape(self, slide_index: int, shape_index: int) -> dict[str, Any]:
+        self.run_script(
+            'tell application "Microsoft PowerPoint"\n'
+            f"delete shape {shape_index} of slide {slide_index} of active presentation\n"
+            "end tell"
+        )
+        return {"status": "ok", "slide": slide_index, "deleted_shape": shape_index}
+
+    def set_shape_fill(self, slide_index: int, shape_index: int, color: str) -> dict[str, Any]:
+        lines = [
+            'tell application "Microsoft PowerPoint"',
+            f"set shp to shape {shape_index} of slide {slide_index} of active presentation",
+        ]
+        lines += _fill_block("shp", color)
+        lines += ["return name of shp", "end tell"]
+        name = self.run_script("\n".join(lines))
+        return {"status": "ok", "slide": slide_index, "shape": shape_index, "name": name, "fill": color}
+
+    def set_shape_line(self, slide_index: int, shape_index: int, color: str, weight: float = 1.0) -> dict[str, Any]:
+        r, g, b = _parse_color(color)
+        self.run_script(
+            'tell application "Microsoft PowerPoint"\n'
+            f"set shp to shape {shape_index} of slide {slide_index} of active presentation\n"
+            "tell line format of shp\n"
+            f"set fore color to {_clist(r, g, b)}\n"
+            f"set line weight to {weight}\n"
+            "end tell\n"
+            "end tell"
+        )
+        return {"status": "ok", "slide": slide_index, "shape": shape_index, "line": color, "weight": weight}
+
+    def z_order_shape(self, slide_index: int, shape_index: int, action: str) -> dict[str, Any]:
+        actions = {
+            "front": "bring shape to front",
+            "back": "send shape to back",
+            "forward": "bring shape forward",
+            "backward": "send shape backward",
+        }
+        z_action = actions.get(action)
+        if not z_action:
+            return {"status": "error", "error": f"Unknown z-order action: {action}"}
+        self.run_script(
+            'tell application "Microsoft PowerPoint"\n'
+            f"set shp to shape {shape_index} of slide {slide_index} of active presentation\n"
+            f"z order shp z order position {z_action}\n"
+            "end tell"
+        )
+        return {"status": "ok", "slide": slide_index, "shape": shape_index, "action": action}
 
     # ══════════════════════════════════════════════════════════════════
     # Slide Background (full-width text box)
@@ -433,10 +666,47 @@ class PowerPointBackend:
             bg_color=fill_color, font_size=1,
         )
 
+    def add_native_rect(
+        self,
+        slide_index: int,
+        left: float,
+        top: float,
+        width: float,
+        height: float,
+        fill_color: str | None = None,
+        line_color: str | None = None,
+        line_weight: float = 1.0,
+    ) -> dict[str, Any]:
+        lines = [
+            'tell application "Microsoft PowerPoint"',
+            f"set theSlide to slide {slide_index} of active presentation",
+            "set _r to make new shape at end of theSlide",
+            "set auto shape type of _r to autoshape rectangle",
+            f"set left position of _r to {left}",
+            f"set top of _r to {top}",
+            f"set width of _r to {width}",
+            f"set height of _r to {height}",
+        ]
+        if fill_color:
+            lines += _fill_block("_r", fill_color)
+        if line_color:
+            r, g, b = _parse_color(line_color)
+            lines += [
+                "tell line format of _r",
+                f"set fore color to {_clist(r, g, b)}",
+                f"set line weight to {line_weight}",
+                "end tell",
+            ]
+        lines += ["return name of _r", "end tell"]
+        name = self.run_script("\n".join(lines))
+        return {"status": "ok", "shape": name, "type": "rect"}
+
     def add_oval_shape(
         self, slide_index: int,
         left: int = 0, top: int = 0, width: int = 100, height: int = 100,
         fill_color: str | None = None,
+        line_color: str | None = None,
+        line_weight: float = 1.0,
     ) -> dict[str, Any]:
         """Add a colored oval using autoshape. Falls back to rect if unavailable."""
         try:
@@ -450,11 +720,127 @@ class PowerPointBackend:
             ]
             if fill_color:
                 lines += _fill_block("_o", fill_color)
+            if line_color:
+                r, g, b = _parse_color(line_color)
+                lines += [
+                    "tell line format of _o",
+                    f"set fore color to {_clist(r, g, b)}",
+                    f"set line weight to {line_weight}",
+                    "end tell",
+                ]
             lines += ["return name of _o", "end tell"]
             name = self.run_script("\n".join(lines))
             return {"status": "ok", "shape": name, "type": "oval"}
         except RuntimeError:
             return self.add_rect(slide_index, left, top, width, height, fill_color)
+
+    def build_from_spec(self, spec: dict[str, Any]) -> dict[str, Any]:
+        slides = spec.get("slides", [])
+        page = spec.get("page", {})
+        self.new_presentation()
+        self.set_page_size(float(page.get("width", self.SLIDE_W)), float(page.get("height", self.SLIDE_H)))
+        self.ensure_slide_count(len(slides))
+        created = 0
+        skipped = 0
+        for slide in slides:
+            slide_index = int(slide.get("index", 1))
+            elements = slide.get("elements", [])
+            payload = self._build_slide_from_elements(slide_index, elements)
+            created += payload["created"]
+            skipped += payload["skipped"]
+        return {"status": "ok", "slides": len(slides), "elements_created": created, "elements_skipped": skipped}
+
+    def _build_slide_from_elements(self, slide_index: int, elements: list[dict[str, Any]]) -> dict[str, int]:
+        lines = [
+            'tell application "Microsoft PowerPoint"',
+            f"set theSlide to slide {slide_index} of active presentation",
+            "repeat while (count of shapes of theSlide) > 0",
+            "delete shape 1 of theSlide",
+            "end repeat",
+        ]
+        created = 0
+        skipped = 0
+        for idx, element in enumerate(elements, 1):
+            try:
+                snippet = self._element_script(element, idx)
+            except Exception:
+                skipped += 1
+                continue
+            if snippet:
+                lines.extend(snippet)
+                created += 1
+            else:
+                skipped += 1
+        lines.append("end tell")
+        self.run_script("\n".join(lines))
+        return {"created": created, "skipped": skipped}
+
+    def _element_script(self, element: dict[str, Any], idx: int) -> list[str]:
+        kind = element.get("type")
+        var = f"_e{idx}"
+        if kind == "text":
+            lines = [
+                f"set {var} to make new text box at end of theSlide",
+                f"set left position of {var} to {float(element.get('left', 0))}",
+                f"set top of {var} to {float(element.get('top', 0))}",
+                f"set width of {var} to {max(1, float(element.get('width', 1)))}",
+                f"set height of {var} to {max(1, float(element.get('height', 1)))}",
+                f"set content of text range of text frame of {var} to {_escape(element.get('text', ''))}",
+                f"set font size of font of text range of text frame of {var} to {max(1, int(round(float(element.get('font_size', 12)))))}",
+                f"set bold of font of text range of text frame of {var} to {'true' if element.get('bold') else 'false'}",
+                f"set italic of font of text range of text frame of {var} to {'true' if element.get('italic') else 'false'}",
+            ]
+            if element.get("font_name"):
+                lines.append(f"set font name of font of text range of text frame of {var} to {_escape(element['font_name'])}")
+            if element.get("font_color"):
+                lines.append(_font_color_block(var, element["font_color"]))
+            return lines
+        if kind == "image":
+            lines = [
+                f"set {var} to make new picture at end of theSlide with properties {{file name: {json.dumps(element['path'])}}}",
+                f"set left position of {var} to {float(element.get('left', 0))}",
+                f"set top of {var} to {float(element.get('top', 0))}",
+            ]
+            if float(element.get("width", 0)):
+                lines.append(f"set width of {var} to {float(element.get('width', 0))}")
+            if float(element.get("height", 0)):
+                lines.append(f"set height of {var} to {float(element.get('height', 0))}")
+            return lines
+        if kind in {"rect", "oval"}:
+            shape_type = "autoshape rectangle" if kind == "rect" else "autoshape oval"
+            lines = [
+                f"set {var} to make new shape at end of theSlide",
+                f"set auto shape type of {var} to {shape_type}",
+                f"set left position of {var} to {float(element.get('left', 0))}",
+                f"set top of {var} to {float(element.get('top', 0))}",
+                f"set width of {var} to {max(1, float(element.get('width', 1)))}",
+                f"set height of {var} to {max(1, float(element.get('height', 1)))}",
+            ]
+            if element.get("fill_color"):
+                lines.extend(_fill_block(var, element["fill_color"]))
+            if element.get("line_color"):
+                r, g, b = _parse_color(element["line_color"])
+                lines.extend([
+                    f"tell line format of {var}",
+                    f"set fore color to {_clist(r, g, b)}",
+                    f"set line weight to {float(element.get('line_weight', 1.0))}",
+                    "end tell",
+                ])
+            return lines
+        if kind == "line":
+            x1 = float(element.get("x1", 0))
+            y1 = float(element.get("y1", 0))
+            x2 = float(element.get("x2", 0))
+            y2 = float(element.get("y2", 0))
+            r, g, b = _parse_color(element.get("line_color", "#000000"))
+            return [
+                f"set {var} to make new line shape at end of theSlide with properties {{begin line X:{x1}, begin line Y:{y1}, end line X:{x2}, end line Y:{y2}}}",
+                f"tell line format of {var}",
+                f"set fore color to {_clist(r, g, b)}",
+                f"set line weight to {float(element.get('line_weight', 1.0))}",
+                "end tell",
+            ]
+        return []
 
     def add_line_shape(
         self, slide_index: int,
@@ -466,10 +852,7 @@ class PowerPointBackend:
             lines = [
                 'tell application "Microsoft PowerPoint"',
                 f"set theSlide to slide {slide_index} of active presentation",
-                "set _ln to make new shape at end of theSlide",
-                "set auto shape type of _ln to straight connector",
-                f"set left position of _ln to {x1}", f"set top of _ln to {y1}",
-                f"set width of _ln to {abs(x2 - x1) or 1}", f"set height of _ln to {abs(y2 - y1) or 1}",
+                f"set _ln to make new line shape at end of theSlide with properties {{begin line X:{x1}, begin line Y:{y1}, end line X:{x2}, end line Y:{y2}}}",
             ]
             if line_color:
                 r, g, b = _parse_color(line_color)
@@ -502,8 +885,7 @@ class PowerPointBackend:
             f"set theSlide to slide {slide_index} of active presentation",
             f'set _pic to make new picture at end of theSlide with properties {{file name: {json.dumps(full_path)}}}',
         ]
-        if left or top:
-            lines += [f"set left position of _pic to {left}", f"set top of _pic to {top}"]
+        lines += [f"set left position of _pic to {left}", f"set top of _pic to {top}"]
         if width and height:
             lines += [f"set width of _pic to {width}", f"set height of _pic to {height}"]
         lines += ["return name of _pic", "end tell"]
@@ -559,7 +941,13 @@ class PowerPointBackend:
         row: int, col: int, text: str,
         font_size: int = 12, font_color: str | None = None, bold: bool = False,
     ) -> dict[str, Any]:
-        """Note: Table cell access limited in PPT 16.108. Use add_table with body_data."""
+        """Create a text box at default position.
+
+        NOTE: PPT 16.108 AppleScript does not support native table cell access.
+        This method creates a standalone text box as a workaround.
+        table_shape_index, row, and col are accepted for API compatibility but
+        are not used to target table cells.
+        """
         return self.add_text_box(
             slide_index=slide_index, text=text,
             left=80, top=100, width=200, height=30,

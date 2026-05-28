@@ -1,0 +1,34 @@
+{
+  "name": "corporate",
+  "colors": {
+    "primary": "#003366",
+    "accent": "#0078D7",
+    "background": "#FFFFFF",
+    "text": "#1A1A1A",
+    "muted": "#767676",
+    "surface": "#F5F5F5",
+    "border": "#D0D0D0",
+    "success": "#107C10",
+    "warning": "#FF8C00",
+    "error": "#D13438"
+  },
+  "fonts": {
+    "title": "Calibri",
+    "title_zh": "Microsoft YaHei",
+    "body": "Calibri",
+    "body_zh": "Microsoft YaHei",
+    "mono": "Consolas"
+  },
+  "spacing": { "xs": 4, "sm": 8, "md": 16, "lg": 24, "xl": 36, "xxl": 48 },
+  "radii": { "none": 0, "sm": 3, "md": 6, "lg": 12 },
+  "shadows": {
+    "none": "none",
+    "sm": "0 1pt 2pt rgba(0,0,0,0.10)",
+    "md": "0 2pt 6pt rgba(0,0,0,0.15)",
+    "lg": "0 4pt 12pt rgba(0,0,0,0.20)"
+  },
+  "chart_palette": [
+    "#003366", "#0078D7", "#107C10", "#FF8C00",
+    "#D13438", "#767676", "#8764B8", "#00B7C3"
+  ]
+}

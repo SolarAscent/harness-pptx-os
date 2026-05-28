@@ -1,0 +1,34 @@
+{
+  "name": "consulting",
+  "colors": {
+    "primary": "#003A70",
+    "accent": "#0066A1",
+    "background": "#FFFFFF",
+    "text": "#2D2D2D",
+    "muted": "#898989",
+    "surface": "#F4F6F8",
+    "border": "#DCDEE0",
+    "success": "#00875A",
+    "warning": "#F18D05",
+    "error": "#DE350B"
+  },
+  "fonts": {
+    "title": "Calibri Light",
+    "title_zh": "Microsoft YaHei Light",
+    "body": "Calibri",
+    "body_zh": "Microsoft YaHei",
+    "mono": "Consolas"
+  },
+  "spacing": { "xs": 4, "sm": 8, "md": 16, "lg": 24, "xl": 40, "xxl": 56 },
+  "radii": { "none": 0, "sm": 2, "md": 4, "lg": 8 },
+  "shadows": {
+    "none": "none",
+    "sm": "0 1pt 2pt rgba(0,0,0,0.06)",
+    "md": "0 2pt 4pt rgba(0,0,0,0.10)",
+    "lg": "0 4pt 8pt rgba(0,0,0,0.14)"
+  },
+  "chart_palette": [
+    "#003A70", "#0066A1", "#00875A", "#F18D05",
+    "#DE350B", "#898989", "#5243AA", "#00A3BF"
+  ]
+}

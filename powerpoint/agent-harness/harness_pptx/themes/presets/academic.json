@@ -1,0 +1,34 @@
+{
+  "name": "academic",
+  "colors": {
+    "primary": "#1A3A5C",
+    "accent": "#C41E3A",
+    "background": "#FFFFFF",
+    "text": "#222222",
+    "muted": "#6B7B8D",
+    "surface": "#F7F9FB",
+    "border": "#D4D9DE",
+    "success": "#2E7D32",
+    "warning": "#E67E22",
+    "error": "#C0392B"
+  },
+  "fonts": {
+    "title": "Times New Roman",
+    "title_zh": "SimSun",
+    "body": "Times New Roman",
+    "body_zh": "SimSun",
+    "mono": "Courier New"
+  },
+  "spacing": { "xs": 4, "sm": 8, "md": 18, "lg": 24, "xl": 36, "xxl": 48 },
+  "radii": { "none": 0, "sm": 0, "md": 0, "lg": 0 },
+  "shadows": {
+    "none": "none",
+    "sm": "none",
+    "md": "none",
+    "lg": "none"
+  },
+  "chart_palette": [
+    "#1A3A5C", "#C41E3A", "#2E7D32", "#E67E22",
+    "#6B7B8D", "#8E44AD", "#2980B9", "#D4AC0D"
+  ]
+}

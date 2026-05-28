@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import shlex
+from pathlib import Path
 
 import click
 
@@ -55,15 +56,18 @@ def repl(ctx: click.Context) -> None:
             click.echo(
                 "Commands:\n"
                 "  Presentation: info, new, open PATH, save-as PATH, export-pdf PATH,\n"
-                "                close [--no-save], apply-theme PATH\n"
+                "                export-png PATH, close [--no-save], apply-theme PATH,\n"
+                "                build-from-spec SPEC_JSON [--output PATH]\n"
                 "  Slides:       add-slide [--layout], delete-slide N, duplicate-slide N,\n"
-                "                move-slide FROM TO, slide-count, go-to-slide N,\n"
+                "                move-slide FROM TO, list-slides, slide-count, go-to-slide N,\n"
                 "                slide-bg N COLOR, transition N [--effect] [--duration]\n"
+                "  Inspect/Edit: list-shapes N, shape-info N SHAPE, set-text N SHAPE TEXT,\n"
+                "                move-shape N SHAPE [OPTIONS], delete-shape N SHAPE,\n"
+                "                set-fill N SHAPE COLOR, set-line N SHAPE COLOR, z-order N SHAPE ACTION\n"
                 "  Content:      add-title-slide TITLE [OPTIONS], add-text N TEXT [OPTIONS],\n"
                 "                add-bullets N ITEM1 ITEM2... [OPTIONS], add-image N PATH [OPTIONS]\n"
-                "  Shapes:       add-shape N TYPE [OPTIONS], add-rect N [OPTIONS], add-oval N [OPTIONS],\n"
-                "                add-line N X1 Y1 X2 Y2 [OPTIONS], shape-fill N SHAPE COLOR,\n"
-                "                shape-line N SHAPE COLOR [--weight]\n"
+                "  Shapes:       add-rect N [OPTIONS], add-oval N [OPTIONS],\n"
+                "                add-line N X1 Y1 X2 Y2 [OPTIONS]\n"
                 "  Tables:       add-table N ROWS COLS [OPTIONS], set-cell N TABLE ROW COL TEXT [OPTIONS]\n"
                 "  Figures:      add-figure N CHART_TYPE [OPTIONS], figure-types\n"
                 "  Animations:   add-animation N SHAPE [--effect]\n"
@@ -125,6 +129,14 @@ def export_pdf(ctx: click.Context, path: str) -> None:
     emit(ctx.obj["backend"].export_pdf(path), ctx.obj["json"])
 
 
+@main.command("export-png")
+@click.argument("path")
+@json_option
+@click.pass_context
+def export_png(ctx: click.Context, path: str) -> None:
+    emit(ctx.obj["backend"].export_png(path), ctx.obj["json"])
+
+
 @main.command("close")
 @click.option("--no-save", is_flag=True, help="Close without saving changes.")
 @json_option
@@ -139,6 +151,21 @@ def close(ctx: click.Context, no_save: bool) -> None:
 @click.pass_context
 def apply_theme(ctx: click.Context, path: str) -> None:
     emit(ctx.obj["backend"].apply_theme(path), ctx.obj["json"])
+
+
+@main.command("build-from-spec")
+@click.argument("spec_path")
+@click.option("--output", default=None, help="Optional PPTX output path.")
+@json_option
+@click.pass_context
+def build_from_spec(ctx: click.Context, spec_path: str, output: str | None) -> None:
+    with open(spec_path, "r", encoding="utf-8") as handle:
+        spec = json.load(handle)
+    payload = ctx.obj["backend"].build_from_spec(spec)
+    if output:
+        save_payload = ctx.obj["backend"].save_as(output)
+        payload["path"] = save_payload.get("path")
+    emit(payload, ctx.obj["json"])
 
 
 # ══════════════════════════════════════════════════════════════════════
@@ -185,12 +212,123 @@ def slide_count(ctx: click.Context) -> None:
     emit(ctx.obj["backend"].get_slide_count(), ctx.obj["json"])
 
 
+@main.command("list-slides")
+@json_option
+@click.pass_context
+def list_slides(ctx: click.Context) -> None:
+    emit(ctx.obj["backend"].list_slides(), ctx.obj["json"])
+
+
 @main.command("go-to-slide")
 @click.argument("slide_index", type=int)
 @json_option
 @click.pass_context
 def go_to_slide(ctx: click.Context, slide_index: int) -> None:
     emit(ctx.obj["backend"].go_to_slide(slide_index), ctx.obj["json"])
+
+
+# ══════════════════════════════════════════════════════════════════════
+# Shape Inspection and Editing
+# ══════════════════════════════════════════════════════════════════════
+
+@main.command("list-shapes")
+@click.argument("slide_index", type=int)
+@json_option
+@click.pass_context
+def list_shapes(ctx: click.Context, slide_index: int) -> None:
+    emit(ctx.obj["backend"].list_shapes(slide_index), ctx.obj["json"])
+
+
+@main.command("shape-info")
+@click.argument("slide_index", type=int)
+@click.argument("shape_index", type=int)
+@json_option
+@click.pass_context
+def shape_info(ctx: click.Context, slide_index: int, shape_index: int) -> None:
+    emit(ctx.obj["backend"].get_shape(slide_index, shape_index), ctx.obj["json"])
+
+
+@main.command("set-text")
+@click.argument("slide_index", type=int)
+@click.argument("shape_index", type=int)
+@click.argument("text")
+@click.option("--font-size", type=int, default=None)
+@click.option("--font-name", default="")
+@click.option("--font-color", default=None)
+@click.option("--bold/--no-bold", default=None)
+@click.option("--italic/--no-italic", default=None)
+@json_option
+@click.pass_context
+def set_text(ctx: click.Context, slide_index: int, shape_index: int, text: str,
+             font_size: int | None, font_name: str, font_color: str | None,
+             bold: bool | None, italic: bool | None) -> None:
+    emit(ctx.obj["backend"].set_shape_text(
+        slide_index=slide_index, shape_index=shape_index, text=text,
+        font_size=font_size, font_name=font_name, font_color=font_color,
+        bold=bold, italic=italic,
+    ), ctx.obj["json"])
+
+
+@main.command("move-shape")
+@click.argument("slide_index", type=int)
+@click.argument("shape_index", type=int)
+@click.option("--left", type=float, default=None)
+@click.option("--top", type=float, default=None)
+@click.option("--width", type=float, default=None)
+@click.option("--height", type=float, default=None)
+@click.option("--rotation", type=float, default=None)
+@click.option("--name", default=None)
+@json_option
+@click.pass_context
+def move_shape(ctx: click.Context, slide_index: int, shape_index: int,
+               left: float | None, top: float | None,
+               width: float | None, height: float | None,
+               rotation: float | None, name: str | None) -> None:
+    emit(ctx.obj["backend"].update_shape(
+        slide_index=slide_index, shape_index=shape_index,
+        left=left, top=top, width=width, height=height,
+        rotation=rotation, name=name,
+    ), ctx.obj["json"])
+
+
+@main.command("delete-shape")
+@click.argument("slide_index", type=int)
+@click.argument("shape_index", type=int)
+@json_option
+@click.pass_context
+def delete_shape(ctx: click.Context, slide_index: int, shape_index: int) -> None:
+    emit(ctx.obj["backend"].delete_shape(slide_index, shape_index), ctx.obj["json"])
+
+
+@main.command("set-fill")
+@click.argument("slide_index", type=int)
+@click.argument("shape_index", type=int)
+@click.argument("color")
+@json_option
+@click.pass_context
+def set_fill(ctx: click.Context, slide_index: int, shape_index: int, color: str) -> None:
+    emit(ctx.obj["backend"].set_shape_fill(slide_index, shape_index, color), ctx.obj["json"])
+
+
+@main.command("set-line")
+@click.argument("slide_index", type=int)
+@click.argument("shape_index", type=int)
+@click.argument("color")
+@click.option("--weight", type=float, default=1.0)
+@json_option
+@click.pass_context
+def set_line(ctx: click.Context, slide_index: int, shape_index: int, color: str, weight: float) -> None:
+    emit(ctx.obj["backend"].set_shape_line(slide_index, shape_index, color, weight), ctx.obj["json"])
+
+
+@main.command("z-order")
+@click.argument("slide_index", type=int)
+@click.argument("shape_index", type=int)
+@click.argument("action", type=click.Choice(["front", "back", "forward", "backward"]))
+@json_option
+@click.pass_context
+def z_order(ctx: click.Context, slide_index: int, shape_index: int, action: str) -> None:
+    emit(ctx.obj["backend"].z_order_shape(slide_index, shape_index, action), ctx.obj["json"])
 
 
 @main.command("slide-bg")
@@ -279,16 +417,18 @@ def add_title_slide(
 @click.option("--bold/--no-bold", default=False)
 @click.option("--italic/--no-italic", default=False)
 @click.option("--alignment", default="", type=click.Choice(["", "left", "center", "right", "justify"]))
+@click.option("--bg-color", default=None, help="Background fill color: 'R,G,B' or '#RRGGBB'.")
 @json_option
 @click.pass_context
 def add_text(ctx: click.Context, slide_index: int, text: str, left: int, top: int,
              width: int, height: int, font_name: str, font_size: int,
-             font_color: str | None, bold: bool, italic: bool, alignment: str) -> None:
+             font_color: str | None, bold: bool, italic: bool, alignment: str,
+             bg_color: str | None) -> None:
     emit(ctx.obj["backend"].add_text_box(
         slide_index=slide_index, text=text,
         left=left, top=top, width=width, height=height,
         font_name=font_name, font_size=font_size, font_color=font_color,
-        bold=bold, italic=italic, alignment=alignment,
+        bold=bold, italic=italic, alignment=alignment, bg_color=bg_color,
     ), ctx.obj["json"])
 
 
@@ -493,6 +633,7 @@ def add_figure(ctx: click.Context, slide_index: int, chart_type: str,
             slide_index=slide_index, image_path=image_path,
             left=left, top=top, width=img_width, height=img_height,
         )
+        Path(image_path).unlink(missing_ok=True)
         emit({"status": "ok", "figure": image_path, "slide": slide_index, "image": img_result.get("image")}, ctx.obj["json"])
     except ImportError as e:
         emit({"status": "error", "error": f"matplotlib required: {e}"}, ctx.obj["json"])

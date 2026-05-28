@@ -1,0 +1,34 @@
+{
+  "name": "minimal",
+  "colors": {
+    "primary": "#000000",
+    "accent": "#333333",
+    "background": "#FFFFFF",
+    "text": "#1A1A1A",
+    "muted": "#999999",
+    "surface": "#FAFAFA",
+    "border": "#E5E5E5",
+    "success": "#4CAF50",
+    "warning": "#FF9800",
+    "error": "#F44336"
+  },
+  "fonts": {
+    "title": "Helvetica",
+    "title_zh": "PingFang SC",
+    "body": "Helvetica",
+    "body_zh": "PingFang SC",
+    "mono": "Menlo"
+  },
+  "spacing": { "xs": 6, "sm": 12, "md": 24, "lg": 36, "xl": 48, "xxl": 64 },
+  "radii": { "none": 0, "sm": 0, "md": 0, "lg": 0 },
+  "shadows": {
+    "none": "none",
+    "sm": "none",
+    "md": "none",
+    "lg": "none"
+  },
+  "chart_palette": [
+    "#000000", "#333333", "#666666", "#999999",
+    "#CCCCCC", "#4CAF50", "#FF9800", "#F44336"
+  ]
+}

@@ -1,0 +1,34 @@
+{
+  "name": "startup",
+  "colors": {
+    "primary": "#1A1A2E",
+    "accent": "#E94560",
+    "background": "#FFFFFF",
+    "text": "#16213E",
+    "muted": "#7B7B8B",
+    "surface": "#F8F9FA",
+    "border": "#E2E4E9",
+    "success": "#0FA958",
+    "warning": "#F5A623",
+    "error": "#E94560"
+  },
+  "fonts": {
+    "title": "Helvetica Neue",
+    "title_zh": "PingFang SC",
+    "body": "Helvetica Neue",
+    "body_zh": "PingFang SC",
+    "mono": "SF Mono"
+  },
+  "spacing": { "xs": 2, "sm": 6, "md": 12, "lg": 20, "xl": 32, "xxl": 48 },
+  "radii": { "none": 0, "sm": 8, "md": 12, "lg": 20 },
+  "shadows": {
+    "none": "none",
+    "sm": "0 1pt 3pt rgba(0,0,0,0.08)",
+    "md": "0 4pt 8pt rgba(0,0,0,0.12)",
+    "lg": "0 8pt 24pt rgba(0,0,0,0.18)"
+  },
+  "chart_palette": [
+    "#1A1A2E", "#E94560", "#0FA958", "#F5A623",
+    "#533B7E", "#4ECDC4", "#FF6B6B", "#845EC2"
+  ]
+}

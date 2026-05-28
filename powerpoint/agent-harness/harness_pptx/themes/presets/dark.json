@@ -1,0 +1,34 @@
+{
+  "name": "dark",
+  "colors": {
+    "primary": "#60A5FA",
+    "accent": "#C084FC",
+    "background": "#0F172A",
+    "text": "#F1F5F9",
+    "muted": "#64748B",
+    "surface": "#1E293B",
+    "border": "#334155",
+    "success": "#34D399",
+    "warning": "#FBBF24",
+    "error": "#F87171"
+  },
+  "fonts": {
+    "title": "Segoe UI",
+    "title_zh": "Microsoft YaHei",
+    "body": "Segoe UI",
+    "body_zh": "Microsoft YaHei",
+    "mono": "Cascadia Code"
+  },
+  "spacing": { "xs": 4, "sm": 8, "md": 16, "lg": 24, "xl": 36, "xxl": 48 },
+  "radii": { "none": 0, "sm": 4, "md": 8, "lg": 16 },
+  "shadows": {
+    "none": "none",
+    "sm": "0 1pt 2pt rgba(0,0,0,0.40)",
+    "md": "0 2pt 6pt rgba(0,0,0,0.50)",
+    "lg": "0 4pt 16pt rgba(0,0,0,0.60)"
+  },
+  "chart_palette": [
+    "#60A5FA", "#C084FC", "#34D399", "#FBBF24",
+    "#F87171", "#64748B", "#FB923C", "#38BDF8"
+  ]
+}
