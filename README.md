@@ -22,7 +22,13 @@ pip install -e powerpoint/agent-harness
 source powerpoint/.venv-office-harness/bin/activate
 ```
 
-**Windows / Linux** — install the python-pptx dependency:
+**Windows** — install pywin32 for COM automation (native PowerPoint control):
+
+```bash
+pip install pywin32
+```
+
+**Linux** — or cross-platform without Office — install python-pptx:
 
 ```bash
 pip install python-pptx
@@ -77,7 +83,8 @@ The harness auto-detects the platform and selects the best backend:
 | Platform | Backend | Requirements |
 |----------|---------|--------------|
 | **macOS** | AppleScript | Microsoft PowerPoint |
-| **Windows** | python-pptx | `pip install python-pptx` |
+| **Windows** | COM (pywin32) | Microsoft PowerPoint + `pip install pywin32` |
+| **Windows (no Office)** | python-pptx | `pip install python-pptx` |
 | **Linux** | python-pptx | `pip install python-pptx` |
 
 To select a backend explicitly:
@@ -85,13 +92,12 @@ To select a backend explicitly:
 ```python
 from harness_pptx.backends.registry import get_backend
 
-backend = get_backend("pptx-xml")  # cross-platform
-# or
-backend = get_backend("applescript")  # macOS only
+backend = get_backend("com")        # Windows COM (native PowerPoint)
+backend = get_backend("applescript") # macOS AppleScript
+backend = get_backend("pptx-xml")   # cross-platform (no Office needed)
 ```
 
-The python-pptx backend supports native tables, native charts, rounded
-rectangles, and all shape types — no PowerPoint installation needed.
+The COM backend provides native tables, native charts, shape grouping, and slide-level PNG export — same fidelity as the macOS AppleScript backend.
 
 ## Themes
 
@@ -136,7 +142,7 @@ harness-pptx-os/
 │       │   ├── content/               # LLM-driven text understanding
 │       │   ├── slide_types/           # 25 slide templates
 │       │   ├── themes/                # Design tokens and presets
-│       │   ├── backends/              # AppleScript + python-pptx backends
+│       │   ├── backends/              # AppleScript + COM + python-pptx backends
 │       │   ├── layout/                # Declarative layout engine
 │       │   ├── renderer/              # SceneGraph → PowerPoint
 │       │   ├── qa/                    # Automated quality checks

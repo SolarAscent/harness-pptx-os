@@ -1,6 +1,6 @@
 ---
 name: harness-pptx
-description: PowerPoint automation harness for creating, editing, and exporting PPTX files. Uses AppleScript on macOS and python-pptx on Windows/Linux for cross-platform support. Use for any PPT creation/editing task — from simple slide decks to complex academic presentations with LaTeX formulas.
+description: PowerPoint automation harness for creating, editing, and exporting PPTX files. Uses AppleScript on macOS, COM on Windows, and python-pptx on Linux for cross-platform support. Use for any PPT creation/editing task — from simple slide decks to complex academic presentations with LaTeX formulas.
 ---
 
 # harness-pptx — PowerPoint Automation Skill
@@ -9,7 +9,8 @@ Use the CLI-Anything PowerPoint harness to create, edit, and export PowerPoint p
 
 **Platform support:**
 - **macOS**: `cli-anything-powerpoint` drives Microsoft PowerPoint via AppleScript (full fidelity, all native features)
-- **Windows / Linux**: `harness_pptx` pipeline uses python-pptx for cross-platform OOXML manipulation (no PowerPoint installation needed)
+- **Windows**: `cli-anything-powerpoint` drives Microsoft PowerPoint via COM/pywin32 (native tables, charts, grouping)
+- **Linux / no Office**: `harness_pptx` pipeline uses python-pptx for cross-platform OOXML manipulation
 
 ## Activation
 
@@ -18,7 +19,14 @@ Use the CLI-Anything PowerPoint harness to create, edit, and export PowerPoint p
 source /Users/tianyangsong/Code/Agent/test/pptx/.venv-office-harness/bin/activate
 ```
 
-**Windows / Linux:**
+**Windows (COM — requires PowerPoint installed):**
+```bash
+pip install pywin32
+# Then use the harness:
+python -c "from harness_pptx.backends.registry import get_backend; backend = get_backend('com')"
+```
+
+**Windows / Linux (no Office needed):**
 ```bash
 pip install python-pptx
 # Then use the harness_pptx Python pipeline:

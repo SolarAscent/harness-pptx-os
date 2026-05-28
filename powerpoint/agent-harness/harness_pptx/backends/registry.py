@@ -30,14 +30,24 @@ class BackendRegistry:
         """Select the best backend for the current platform.
 
         macOS → AppleScript (native PowerPoint automation)
-        Windows / Linux → pptx-xml (python-pptx cross-platform)
+        Windows → COM (pywin32, native PowerPoint automation)
+        Linux / fallback → pptx-xml (python-pptx cross-platform)
         """
         system = platform.system()
         if system == "Darwin":
-            # macOS — try AppleScript backend first
             if "applescript" in self._backends:
                 return self.get("applescript")
-        # Fall back to pptx-xml for all platforms
+        elif system == "Windows":
+            # Try COM first (native PowerPoint), fall back to pptx-xml
+            if "com" in self._backends:
+                try:
+                    import win32com.client  # noqa: F401
+                    return self.get("com")
+                except ImportError:
+                    pass
+            if "pptx-xml" in self._backends:
+                return self.get("pptx-xml")
+        # Fallback for Linux and any other platform
         if "pptx-xml" in self._backends:
             return self.get("pptx-xml")
         raise RuntimeError(
@@ -55,8 +65,10 @@ def get_backend_registry() -> BackendRegistry:
     if _backend_registry is None:
         _backend_registry = BackendRegistry()
         from harness_pptx.backends.applescript_backend import AppleScriptBackend
+        from harness_pptx.backends.com_backend import COMBackend
         from harness_pptx.backends.pptx_xml_backend import PPTXXmlBackend
         _backend_registry.register("applescript", AppleScriptBackend)
+        _backend_registry.register("com", COMBackend)
         _backend_registry.register("pptx-xml", PPTXXmlBackend)
     return _backend_registry
 

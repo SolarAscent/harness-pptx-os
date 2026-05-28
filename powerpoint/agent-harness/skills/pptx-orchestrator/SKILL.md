@@ -30,14 +30,17 @@ Orchestrator (You)
 **Before Phase 3, detect the platform and select the build approach:**
 
 - **macOS**: Use `cli-anything-powerpoint` CLI harness (AppleScript, highest fidelity)
-- **Windows / Linux**: Use `harness_pptx` Python pipeline (python-pptx, cross-platform)
+- **Windows**: Use `cli-anything-powerpoint` CLI harness (COM/pywin32, native PowerPoint control)
+- **Linux / no Office**: Use `harness_pptx` Python pipeline (python-pptx, cross-platform)
 
 Auto-detect in bash:
 ```bash
 if [[ "$OSTYPE" == "darwin"* ]]; then
     echo "macOS — using AppleScript harness"
+elif [[ "$OSTYPE" == "msys" || "$OSTYPE" == "cygwin" || "$OS" == "Windows_NT" ]]; then
+    echo "Windows — using COM harness"
 else
-    echo "Windows/Linux — using python-pptx pipeline"
+    echo "Linux — using python-pptx pipeline"
 fi
 ```
 
