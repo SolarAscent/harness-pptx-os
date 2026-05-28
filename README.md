@@ -1,4 +1,4 @@
-# 🎬 Harness PPTX — The PowerPoint Generation Operating System
+# Harness PPTX — The PowerPoint Generation Operating System
 
 <p align="center">
   <b>Text → Brief → Story → Outline → SceneGraph → Theme + Layout → PPTX → QA → Repair</b>
