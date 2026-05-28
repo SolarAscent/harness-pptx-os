@@ -1,12 +1,14 @@
 # Harness PPTX
 
-PowerPoint automation for AI agents on macOS. Drives Microsoft PowerPoint via
-AppleScript to create, edit, and export `.pptx` files from structured slide
-specifications.
+PowerPoint automation for AI agents — cross-platform (macOS, Windows, Linux).
+Drives Microsoft PowerPoint via AppleScript on macOS, and uses python-pptx for
+native OOXML manipulation on all platforms. Create, edit, and export `.pptx`
+files from structured slide specifications.
 
 ## Installation
 
-Requires macOS with Microsoft PowerPoint installed, and Python 3.10+.
+Python 3.10+ is required. On macOS, Microsoft PowerPoint provides the highest
+fidelity; on Windows and Linux, no Office installation is needed.
 
 ```bash
 git clone https://github.com/SolarAscent/harness-pptx-os.git
@@ -14,10 +16,16 @@ cd harness-pptx-os
 pip install -e powerpoint/agent-harness
 ```
 
-On macOS, activate the bundled virtual environment:
+**macOS** — activate the bundled virtual environment for AppleScript support:
 
 ```bash
 source powerpoint/.venv-office-harness/bin/activate
+```
+
+**Windows / Linux** — install the python-pptx dependency:
+
+```bash
+pip install python-pptx
 ```
 
 ## Quick start
@@ -44,7 +52,8 @@ The pipeline processes freeform text into a rendered `.pptx` through six stages:
 4. **Intent Classifier** — assigns a slide type to each page from 25 templates
 5. **Slide Types + Layout** — builds a SceneGraph with resolved coordinates using
    declarative primitives (`vstack`, `hstack`, `grid`, `split`)
-6. **PowerPoint Renderer** — AppleScript backend drives native shapes and text
+6. **PowerPoint Renderer** — AppleScript backend (macOS, native shapes + text) or
+   python-pptx backend (cross-platform, native tables + charts)
 
 Optional QA and repair loop runs automated checks (text overflow, element overlap,
 font size, margin, density, contrast) and re-renders until issues are resolved.
@@ -61,9 +70,32 @@ objects, team members as `{name, role, bio}`, etc.). See
 [AGENT.md](powerpoint/agent-harness/harness_pptx/AGENT.md) for the complete
 field reference.
 
+## Backends
+
+The harness auto-detects the platform and selects the best backend:
+
+| Platform | Backend | Requirements |
+|----------|---------|--------------|
+| **macOS** | AppleScript | Microsoft PowerPoint |
+| **Windows** | python-pptx | `pip install python-pptx` |
+| **Linux** | python-pptx | `pip install python-pptx` |
+
+To select a backend explicitly:
+
+```python
+from harness_pptx.backends.registry import get_backend
+
+backend = get_backend("pptx-xml")  # cross-platform
+# or
+backend = get_backend("applescript")  # macOS only
+```
+
+The python-pptx backend supports native tables, native charts, rounded
+rectangles, and all shape types — no PowerPoint installation needed.
+
 ## Themes
 
-Seven built-in themes selectable by name: `corporate`, `academic`, `startup`,
+Eight built-in themes: `corporate`, `academic`, `academic_purple`, `startup`,
 `consulting`, `technical`, `minimal`, `dark`.
 
 Each theme defines semantic color tokens (`primary`, `accent`, `background`,
@@ -104,7 +136,7 @@ harness-pptx-os/
 │       │   ├── content/               # LLM-driven text understanding
 │       │   ├── slide_types/           # 25 slide templates
 │       │   ├── themes/                # Design tokens and presets
-│       │   ├── backends/              # AppleScript + PPTX XML backends
+│       │   ├── backends/              # AppleScript + python-pptx backends
 │       │   ├── layout/                # Declarative layout engine
 │       │   ├── renderer/              # SceneGraph → PowerPoint
 │       │   ├── qa/                    # Automated quality checks
