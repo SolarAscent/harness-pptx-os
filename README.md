@@ -74,12 +74,12 @@ flowchart LR
 
 ```bash
 # Clone and install
-git clone https://github.com/YOUR_USER/harness-pptx.git
-cd harness-pptx
-pip install -e .
+git clone https://github.com/SolarAscent/harness-pptx-os.git
+cd harness-pptx-os
+pip install -e powerpoint/agent-harness
 
-# Or install directly
-pip install -e /path/to/agent-harness
+# macOS: use the bundled virtual environment
+source powerpoint/.venv-office-harness/bin/activate
 ```
 
 ### 5-Second Demo
@@ -339,65 +339,60 @@ config = PipelineConfig(enable_visual_review=True)
 ## 📁 Project Structure
 
 ```
-agent-harness/
-├── harness_pptx/              # Core package
-│   ├── __init__.py            # v0.2.0
-│   ├── pipeline.py            # DeckPipeline orchestrator (13 steps)
-│   ├── AGENT.md               # AI agent usage guide
-│   │
-│   ├── models/                # Pydantic data contracts
-│   │   ├── content.py         # Brief, Outline, SlideIntent
-│   │   ├── element.py         # TextElement, ShapeElement, ChartElement...
-│   │   ├── scene_graph.py     # SceneGraph, SlideNode, LayerNode
-│   │   ├── theme.py           # Theme color/font/spacing tokens
-│   │   ├── layout.py          # BBox, LayoutSpec, alignment primitives
-│   │   └── qa.py             # QAIssue, QAReport, Severity enum
-│   │
-│   ├── content/               # LLM-driven text understanding
-│   │   ├── brief_parser.py    # Text → Brief extraction
-│   │   ├── story_planner.py   # Brief → NarrativeStructure
-│   │   ├── outline_builder.py # Narrative → Outline
-│   │   ├── intent_classifier.py # Outline → list[SlideIntent]
-│   │   └── prompts.py         # LLM prompt templates
-│   │
-│   ├── slide_types/           # 25 template functions
-│   │   ├── cover.py, agenda.py, problem.py, solution.py...
-│   │   └── base.py            # SlideType protocol + registry
-│   │
-│   ├── themes/                # Design system
-│   │   ├── base.py            # ThemeRegistry
-│   │   └── presets/           # 7 theme JSON files
-│   │
-│   ├── layout/                # Layout engine
-│   │   └── engine.py          # vstack, hstack, grid, split
-│   │
-│   ├── backends/              # PowerPoint rendering
-│   │   ├── interface.py       # RendererInterface (ABC)
-│   │   ├── applescript_backend.py  # macOS native (AppleScript)
-│   │   └── pptx_xml_backend.py     # Cross-platform (skeleton)
-│   │
-│   ├── renderer/              # SceneGraph → PowerPoint
-│   │   ├── engine.py          # DeckRenderer
-│   │   └── element_renderer.py # Per-element dispatch
-│   │
-│   ├── qa/                    # Quality assurance
-│   │   ├── engine.py          # QAEngine — 7 model checks
-│   │   └── visual_reviewer.py # AI vision-based slide review
-│   │
-│   ├── repair/                # Auto-repair system
-│   │   ├── engine.py          # RepairEngine
-│   │   └── planner.py         # RepairPlanner
-│   │
-│   ├── vision/                # Vision API client
-│   │   └── client.py          # doubao-seed-2-0-pro integration
-│   │
-│   └── cli/                   # CLI commands & workspace
-│       └── commands.py        # create-from-text, plan, build, qa, repair
+harness-pptx-os/
+├── README.md                  # This file (repo root)
 │
-├── cli_anything/              # Legacy CLI remote-control (partial)
-├── setup.py                   # Package metadata
-├── README.md                  # This file
-└── .gitignore
+├── powerpoint/
+│   ├── agent-harness/         # Core harness_pptx package
+│   │   ├── setup.py
+│   │   ├── .gitignore
+│   │   ├── harness_pptx/
+│   │   │   ├── __init__.py        # v0.2.0
+│   │   │   ├── pipeline.py        # DeckPipeline orchestrator (13 steps)
+│   │   │   ├── AGENT.md           # AI agent usage guide
+│   │   │   │
+│   │   │   ├── models/            # Pydantic data contracts
+│   │   │   │   ├── content.py     # Brief, Outline, SlideIntent
+│   │   │   │   ├── element.py     # TextElement, ShapeElement, ChartElement...
+│   │   │   │   ├── scene_graph.py # SceneGraph, SlideNode, LayerNode
+│   │   │   │   ├── theme.py       # Theme color/font/spacing tokens
+│   │   │   │   ├── layout.py      # BBox, LayoutSpec, alignment primitives
+│   │   │   │   └── qa.py         # QAIssue, QAReport, Severity enum
+│   │   │   │
+│   │   │   ├── content/           # LLM-driven text understanding
+│   │   │   │   ├── brief_parser.py
+│   │   │   │   ├── story_planner.py
+│   │   │   │   ├── intent_classifier.py
+│   │   │   │   └── prompts.py     # LLM prompt templates
+│   │   │   │
+│   │   │   ├── slide_types/       # 25 template functions
+│   │   │   │   ├── cover.py, agenda.py, problem.py, solution.py...
+│   │   │   │   └── base.py        # SlideType protocol + registry
+│   │   │   │
+│   │   │   ├── themes/            # Design system
+│   │   │   │   ├── base.py        # ThemeRegistry
+│   │   │   │   └── presets/       # 7 theme JSON files
+│   │   │   │
+│   │   │   ├── backends/          # PowerPoint rendering
+│   │   │   │   ├── interface.py   # RendererInterface (ABC)
+│   │   │   │   └── applescript_backend.py  # macOS native (AppleScript)
+│   │   │   │
+│   │   │   ├── renderer/          # SceneGraph → PowerPoint
+│   │   │   ├── qa/                # QA engine + visual review
+│   │   │   ├── repair/            # Auto-repair system
+│   │   │   ├── vision/            # Vision API client
+│   │   │   ├── layout/            # Layout engine
+│   │   │   ├── cli/               # CLI commands & workspace
+│   │   │   ├── narrative/         # Story frameworks
+│   │   │   ├── stability/         # Transaction/retry/logging
+│   │   │   └── memory/            # Agent memory
+│   │   │
+│   │   └── cli_anything/          # Legacy CLI remote-control
+│   │
+│   └── .venv-office-harness/      # macOS virtual environment
+│
+├── word/                          # Word harness (sibling project)
+└── excel/                         # Excel harness (sibling project)
 ```
 
 ---
