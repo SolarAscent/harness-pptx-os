@@ -27,11 +27,23 @@ class BackendRegistry:
         return sorted(self._backends.keys())
 
     def auto_detect(self) -> RendererInterface:
-        """Select the best backend for the current platform."""
+        """Select the best backend for the current platform.
+
+        macOS → AppleScript (native PowerPoint automation)
+        Windows / Linux → pptx-xml (python-pptx cross-platform)
+        """
         system = platform.system()
         if system == "Darwin":
-            return self.get("applescript")
-        return self.get("pptx-xml")
+            # macOS — try AppleScript backend first
+            if "applescript" in self._backends:
+                return self.get("applescript")
+        # Fall back to pptx-xml for all platforms
+        if "pptx-xml" in self._backends:
+            return self.get("pptx-xml")
+        raise RuntimeError(
+            f"No suitable backend found for platform '{system}'. "
+            f"Available backends: {self.list()}"
+        )
 
 
 # Singleton

@@ -25,6 +25,22 @@ Orchestrator (You)
   └── Phase 4: QA Agent — reviews and fixes issues
 ```
 
+## Platform Detection
+
+**Before Phase 3, detect the platform and select the build approach:**
+
+- **macOS**: Use `cli-anything-powerpoint` CLI harness (AppleScript, highest fidelity)
+- **Windows / Linux**: Use `harness_pptx` Python pipeline (python-pptx, cross-platform)
+
+Auto-detect in bash:
+```bash
+if [[ "$OSTYPE" == "darwin"* ]]; then
+    echo "macOS — using AppleScript harness"
+else
+    echo "Windows/Linux — using python-pptx pipeline"
+fi
+```
+
 ## Phase 1: Research
 
 **Goal**: Extract the core argument, key evidence, and structural outline from the source material.
@@ -97,7 +113,9 @@ The Narrative Agent output is the build plan.
 
 ## Phase 3: Build
 
-**Goal**: Execute harness CLI commands to construct each slide.
+**Goal**: Execute harness CLI commands (macOS) or python-pptx pipeline (Windows/Linux) to construct each slide.
+
+### macOS Build (AppleScript Harness)
 
 **CRITICAL**: Activate the harness first:
 ```bash
@@ -198,6 +216,97 @@ done
 3. **Contents slides inline**: Place each contents slide at the correct position within the slide sequence.
 4. **Page numbers**: Every slide gets a page number at (880, 505), font-size 11, color "137,137,137".
 5. **Background first**: Always set `slide-bg` immediately after `add-slide`.
+
+### Windows / Linux Build (python-pptx Pipeline)
+
+On non-macOS platforms, use the `harness_pptx` Python pipeline which creates PPTX files directly via python-pptx:
+
+```python
+from harness_pptx.pipeline import DeckPipeline, PipelineConfig
+
+config = PipelineConfig(
+    theme="academic_purple",
+    target_slides=12,
+    output_dir="./output",
+)
+
+pipeline = DeckPipeline(config=config)
+result = pipeline.run("""
+[Brief text describing the presentation topic, audience, key points]
+""")
+
+if result.success:
+    print(f"Deck saved to {result.pptx_path}")
+else:
+    print(f"Build failed: {result.errors}")
+```
+
+**Programmatic slide construction (for fine-grained control):**
+
+```python
+from pptx import Presentation
+from pptx.util import Inches, Pt
+from pptx.dml.color import RGBColor
+from pptx.enum.text import PP_ALIGN
+from pptx.enum.shapes import MSO_SHAPE
+
+# Canvas: 960x540 points = 13.333" x 7.5"
+prs = Presentation()
+prs.slide_width = Inches(13.333)  # 960pt
+prs.slide_height = Inches(7.5)    # 540pt
+
+# Add a slide with blank layout
+slide_layout = prs.slide_layouts[6]  # blank
+slide = prs.slides.add_slide(slide_layout)
+
+# Background
+background = slide.background
+fill = background.fill
+fill.solid()
+fill.fore_color.rgb = RGBColor(255, 255, 255)
+
+# Text box: title
+txBox = slide.shapes.add_textbox(Inches(1.11), Inches(0.17), Inches(11.11), Inches(0.58))
+tf = txBox.text_frame
+p = tf.paragraphs[0]
+p.text = "Slide Title"
+p.font.size = Pt(30)
+p.font.bold = True
+p.font.color.rgb = RGBColor(0, 0, 0)
+p.font.name = "Calibri"
+
+# Purple oval section tag
+oval = slide.shapes.add_shape(
+    MSO_SHAPE.OVAL, Inches(0.17), Inches(0.11), Inches(0.58), Inches(0.58)
+)
+oval.fill.solid()
+oval.fill.fore_color.rgb = RGBColor(111, 47, 159)
+oval.line.fill.background()
+
+# LaTeX formula → render to PNG, then insert
+# (handled automatically by ElementRenderer._render_formula)
+
+prs.save("output/presentation.pptx")
+```
+
+**Key python-pptx conversions:**
+- 1 point = 12700 EMU = 1/72 inch
+- `Inches(n)` for inch-based positioning
+- `Pt(n)` for font sizes and line widths
+- `RGBColor(r, g, b)` for colors
+- `MSO_SHAPE.RECTANGLE`, `MSO_SHAPE.OVAL`, `MSO_SHAPE.ROUNDED_RECTANGLE` for shapes
+- `MSO_CONNECTOR.STRAIGHT` for lines
+
+**python-pptx advantages over AppleScript harness:**
+- Native table support via `slide.shapes.add_table()`
+- Native chart support via `slide.shapes.add_chart()`
+- No PowerPoint installation required
+- Works identically on Windows, Linux, and macOS
+
+**python-pptx limitations:**
+- No PDF export (use LibreOffice `soffice --headless --convert-to pdf`)
+- No text auto-resize / shrink-on-overflow
+- Shape text formatting limited to paragraph level
 
 ## Phase 4: QA and Repair
 
