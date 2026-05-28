@@ -893,6 +893,91 @@ class PowerPointBackend:
         return {"status": "ok", "image": name, "path": full_path}
 
     # ══════════════════════════════════════════════════════════════════
+    # LaTeX Formula Rendering
+    # ══════════════════════════════════════════════════════════════════
+
+    def add_latex(
+        self, slide_index: int, latex: str,
+        left: int = 80, top: int = 100,
+        width: int = 0, height: int = 0,
+        font_size: int = 18, font_color: str = "0,0,0",
+        bg_color: str = "255,255,255",
+        dpi: int = 200,
+    ) -> dict[str, Any]:
+        """Render a LaTeX formula as an image and insert it onto a slide.
+
+        Uses matplotlib's mathtext renderer (no external LaTeX installation needed).
+        Supports: fractions (\\frac), sums (\\sum), integrals (\\int), Greek letters,
+        subscripts/superscripts, and most common math notation.
+
+        Args:
+            slide_index: Target slide number (1-based).
+            latex: LaTeX math expression (e.g. "P(Y|X) = \\frac{P(Y)P(X|Y)}{P(X)}").
+                   Can optionally be wrapped in $...$ or $$...$$.
+            left, top: Position in points from top-left.
+            width, height: Desired rendered size. 0 = auto-size from content.
+            font_size: Base font size for the rendered formula.
+            font_color: RGB string like "R,G,B".
+            dpi: Render resolution (higher = crisper).
+        """
+        import matplotlib
+        matplotlib.use("Agg")
+        import matplotlib.pyplot as plt
+
+        # Strip outer $ wrappers if present
+        formula = latex.strip()
+        if formula.startswith("$$") and formula.endswith("$$"):
+            formula = formula[2:-2].strip()
+        elif formula.startswith("$") and formula.endswith("$"):
+            formula = formula[1:-1].strip()
+
+        # Wrap in math mode for mathtext rendering
+        formula = f"${formula}$"
+
+        # Parse colors
+        r, g, b = _parse_color(font_color)
+        br, bg, bb = _parse_color(bg_color)
+
+        # Render to figure
+        fig, ax = plt.subplots(figsize=(6, 1.5), dpi=dpi)
+        text = ax.text(
+            0.5, 0.5, formula,
+            transform=ax.transAxes,
+            fontsize=font_size,
+            ha="center", va="center",
+            color=(r / 255, g / 255, b / 255),
+        )
+        ax.axis("off")
+        fig.tight_layout(pad=0)
+
+        # Save to temp file with matching background
+        tmp = tempfile.NamedTemporaryFile(suffix=".png", delete=False)
+        tmp.close()
+        try:
+            fig.savefig(
+                tmp.name, format="png",
+                bbox_inches="tight", pad_inches=0.08,
+                dpi=dpi,
+                facecolor=(br / 255, bg / 255, bb / 255),
+                edgecolor="none",
+            )
+        finally:
+            plt.close(fig)
+
+        # Insert as image
+        result = self.add_image(
+            slide_index=slide_index, image_path=tmp.name,
+            left=left, top=top, width=width, height=height,
+        )
+
+        # Clean up temp file
+        Path(tmp.name).unlink(missing_ok=True)
+
+        result["latex"] = latex
+        result["method"] = "latex_mathtext"
+        return result
+
+    # ══════════════════════════════════════════════════════════════════
     # Tables
     # ══════════════════════════════════════════════════════════════════
 

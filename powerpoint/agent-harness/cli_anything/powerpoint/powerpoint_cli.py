@@ -533,6 +533,44 @@ def add_image(ctx: click.Context, slide_index: int, path: str,
 
 
 # ══════════════════════════════════════════════════════════════════════
+# LaTeX Formula
+# ══════════════════════════════════════════════════════════════════════
+
+@main.command("add-latex")
+@click.argument("slide_index", type=int)
+@click.argument("latex")
+@click.option("--left", type=int, default=80)
+@click.option("--top", type=int, default=100)
+@click.option("--width", type=int, default=0, help="0 = auto-size from content.")
+@click.option("--height", type=int, default=0, help="0 = auto-size from content.")
+@click.option("--font-size", type=int, default=18, help="Base font size for rendered formula.")
+@click.option("--font-color", default="0,0,0", help="RGB color like 'R,G,B'.")
+@click.option("--bg-color", default="255,255,255", help="Background RGB color. Match your slide bg.")
+@click.option("--dpi", type=int, default=200, help="Render resolution (higher = crisper).")
+@json_option
+@click.pass_context
+def add_latex(ctx: click.Context, slide_index: int, latex: str,
+              left: int, top: int, width: int, height: int,
+              font_size: int, font_color: str, bg_color: str, dpi: int) -> None:
+    """Render a LaTeX formula as an image and insert it onto a slide.
+
+    Uses matplotlib mathtext (no external LaTeX needed). Supports fractions,
+    sums, integrals, Greek letters, subscripts/superscripts, and common math notation.
+
+    \\b
+    Examples:
+        cli-anything-powerpoint add-latex 1 "P(Y|X) = \\\\frac{P(Y)P(X|Y)}{P(X)}"
+        cli-anything-powerpoint add-latex 1 "\\\\sum_{i=1}^{n} \\\\alpha_i \\\\cdot x_i"
+        cli-anything-powerpoint add-latex 1 "\\\\lambda_k^{new} = \\\\lambda_k^{old} + \\\\eta \\\\cdot \\\\frac{\\\\partial L}{\\\\partial \\\\lambda_k}"
+    """
+    emit(ctx.obj["backend"].add_latex(
+        slide_index=slide_index, latex=latex,
+        left=left, top=top, width=width, height=height,
+        font_size=font_size, font_color=font_color, bg_color=bg_color, dpi=dpi,
+    ), ctx.obj["json"])
+
+
+# ══════════════════════════════════════════════════════════════════════
 # Tables
 # ══════════════════════════════════════════════════════════════════════
 

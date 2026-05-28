@@ -62,26 +62,100 @@ class PipelineResult:
 
 # ---- Content builder: maps SlideIntent → slide-type build() content dict -------------
 
-def _to_bullets(text: str, min_items: int = 3) -> list[str]:
-    """Split text into bullet points, falling back to defaults if too short."""
-    bullets = [s.strip() for s in text.replace("。", ".").replace("；", ";").replace("，", ",").split(".") if s.strip()]
-    bullets = [b for b in bullets if len(b) > 3]
-    if len(bullets) < min_items:
+import re
+
+def _is_chinese(text: str) -> bool:
+    """Check if text contains Chinese characters."""
+    return any('一' <= c <= '鿿' for c in text)
+
+
+def _to_bullets(text: str, min_items: int = 2) -> list[str]:
+    """Split text into bullet points, handling both Chinese and English."""
+    if not text:
         return []
-    return bullets[:6]
+    # Normalize separators: Chinese/English commas → periods for splitting
+    normalized = text.replace("。", ".").replace("；", ".").replace(";", ".").replace("，", ".").replace("、", ".")
+    parts = [s.strip() for s in normalized.split(".") if s.strip()]
+    parts = [p for p in parts if len(p) > 2]
+    if len(parts) < min_items:
+        return []
+    return parts[:6]
 
 
 def _default_items(seed: str, count: int = 4) -> list[str]:
-    """Generate placeholder items from a seed title."""
-    templates = [
-        f"Overview of {seed}",
-        f"Key Drivers Behind {seed}",
-        f"Current State & Challenges",
-        f"Strategic Opportunities",
-        f"Implementation Roadmap",
-        f"Expected Outcomes & Impact",
-    ]
+    """Generate placeholder items from a seed title, in the appropriate language."""
+    if _is_chinese(seed):
+        templates = [
+            f"{seed}概览",
+            f"{seed}核心要点",
+            f"现状与亮点",
+            f"重要数据与指标",
+            f"发展趋势与展望",
+            f"总结与建议",
+        ]
+    else:
+        templates = [
+            f"Overview of {seed}",
+            f"Key Highlights",
+            f"Current State & Performance",
+            f"Strategic Opportunities",
+            f"Future Outlook",
+            f"Summary & Recommendations",
+        ]
     return templates[:count]
+
+
+def _parse_timeline_items(key_msg: str, title: str) -> list[dict]:
+    """Parse key_message into timeline milestone items."""
+    parts = [p.strip() for p in re.split(r'[，,。；;、]', key_msg) if p.strip() and len(p.strip()) > 2]
+    if not parts:
+        return []
+    items = []
+    for part in parts[:6]:
+        m = re.search(r'(\d{4})\s*年', part)
+        if m:
+            year = m.group(1)
+            event = part.replace(m.group(0), "").strip().lstrip("，,")
+            if not event:
+                event = part
+            items.append({"date": f"{year}", "event": event[:60]})
+        else:
+            items.append({"date": "", "event": part[:60]})
+    return items if items else []
+
+
+def _parse_team_members(key_msg: str) -> list[dict]:
+    """Parse key_message into team member items."""
+    parts = [p.strip() for p in re.split(r'[、，,]', key_msg) if p.strip() and len(p.strip()) > 1]
+    if not parts:
+        return []
+    members = []
+    for part in parts[:6]:
+        part = part.rstrip("等")
+        name = part
+        bio = ""
+        m = re.search(r'[（(]([^）)]+)[）)]', part)
+        if m:
+            name = part[:m.start()].strip()
+            bio = m.group(1).strip()
+        members.append({"name": name[:20], "role": bio[:40], "bio": bio[:60]})
+    return members if members else []
+
+
+def _parse_roadmap_phases(key_msg: str) -> list[dict]:
+    """Parse key_message into roadmap phase items."""
+    parts = [p.strip() for p in re.split(r'[，,。；;]', key_msg) if p.strip() and len(p.strip()) > 2]
+    if not parts:
+        return []
+    phases = []
+    for i, part in enumerate(parts[:5]):
+        phase_num = i + 1
+        phases.append({
+            "name": f"阶段 {phase_num}",
+            "timeline": "",
+            "description": part[:80],
+        })
+    return phases if phases else []
 
 
 def _populate_slide_content(intent, brief=None):
@@ -97,6 +171,9 @@ def _populate_slide_content(intent, brief=None):
     key_msg = getattr(intent, "key_message", "") or ""
     bullets = _to_bullets(key_msg)
     extra = dict(getattr(intent, "extra", {}) or {})
+    use_zh = _is_chinese(intent.title) or _is_chinese(key_msg)
+    if not use_zh and brief:
+        use_zh = _is_chinese(brief.topic) or any(_is_chinese(kp) for kp in brief.key_points[:1])
 
     content: dict[str, Any] = {
         "slide_id": intent.slide_id,
@@ -105,14 +182,10 @@ def _populate_slide_content(intent, brief=None):
     }
 
     # ---- Per-type required-field population ---------------------------------
-    # Each block receives content, extra, key_msg, bullets, brief and must
-    # return a dict that satisfies its slide type's required_fields.
 
     if stype == "cover":
-        # Truncate overly long titles (brief text used as title)
         title_text = intent.title
         if len(title_text) > 80:
-            # Try to extract a reasonable title from the long text
             for sep in ["。", ".", "；", ";", "，", ","]:
                 if sep in title_text[:80]:
                     title_text = title_text.split(sep)[0].strip()
@@ -120,62 +193,81 @@ def _populate_slide_content(intent, brief=None):
             if len(title_text) > 80:
                 title_text = title_text[:77] + "..."
         content["title"] = title_text
-        content["subtitle"] = extra.get("subtitle", key_msg or f"A Presentation on {title_text}")
+        # Use first key_point as subtitle if available, otherwise blank
+        default_subtitle = ""
+        if key_msg:
+            default_subtitle = key_msg
+        elif brief and brief.key_points:
+            first_kp = brief.key_points[0]
+            default_subtitle = first_kp.split("：")[-1].split(":")[-1].strip()[:80]
+        content["subtitle"] = extra.get("subtitle", default_subtitle)
         content["author"] = extra.get("author", "")
         content["date"] = extra.get("date", "")
 
     elif stype == "agenda":
         items = extra.get("items", bullets or _default_items(intent.title, 5))
-        content["items"] = items if items else _default_items(intent.title, 5)
+        if not items and brief and brief.key_points:
+            items = [p.split("：")[0].split(":")[0].strip() for p in brief.key_points[:8]]
+        content["items"] = items[:7] if items else _default_items(intent.title, 5)
 
     elif stype == "executive-summary":
-        pts = extra.get("key_points", bullets or _default_items(intent.title, 4))
-        content["key_points"] = pts if pts else _default_items(intent.title, 4)
-        content["bottom_line"] = extra.get("bottom_line", key_msg if key_msg and not bullets else "")
+        pts = extra.get("key_points", bullets if bullets else key_msg.split("，") if key_msg and use_zh else [])
+        if not pts:
+            pts = _default_items(intent.title, 4)
+        content["key_points"] = [p.strip() for p in pts[:6] if p.strip()]
+        content["bottom_line"] = extra.get("bottom_line", "")
 
     elif stype == "problem":
         content["problem_statement"] = extra.get("problem_statement") or key_msg or (
-            "The current state presents significant challenges that demand a new approach. "
-            "Without intervention, these issues will continue to compound."
+            "当前面临重大挑战，亟需新的解决方案。" if use_zh else
+            "The current state presents significant challenges that demand a new approach."
         )
-        content["pain_points"] = extra.get("pain_points") or bullets or [
-            "Market inefficiency and fragmentation create hidden costs",
-            "High operational overhead with limited transparency",
-            "Lack of data-driven decision making leads to suboptimal outcomes",
-        ]
+        content["pain_points"] = extra.get("pain_points") or bullets or (
+            [f"{intent.title}相关核心痛点", "现有体系难以满足发展需求", "变革与创新势在必行"]
+            if use_zh else
+            ["Market inefficiency and fragmentation create hidden costs",
+             "High operational overhead with limited transparency",
+             "Lack of data-driven decision making"]
+        )
         content["impact"] = extra.get("impact") or (
-            "These challenges collectively result in measurable business impact "
-            "across revenue, efficiency, and competitive position."
+            "这些挑战对组织的可持续发展构成实质影响。" if use_zh else
+            "These challenges result in measurable business impact across key metrics."
         )
 
     elif stype == "solution":
         content["solution_summary"] = extra.get("solution_summary") or key_msg or (
-            "Our approach combines proven methodologies with innovative technology "
-            "to deliver measurable results at scale."
+            "我们提出系统性解决方案。" if use_zh else
+            "Our approach combines proven methodologies with innovative technology."
         )
-        content["key_features"] = extra.get("key_features") or bullets or [
-            "Proprietary AI-powered analytics engine with real-time processing",
-            "Intuitive dashboard with customizable alerts and reporting",
-            "Seamless integration with existing enterprise systems",
-            "Enterprise-grade security with full compliance coverage",
-        ])
+        content["key_features"] = extra.get("key_features") or bullets or (
+            ["核心技术能力卓越", "系统架构先进可靠", "用户体验全面优化", "安全保障完善到位"]
+            if use_zh else
+            ["Core technology capabilities", "Advanced system architecture", "Optimized user experience", "Comprehensive security"]
+        )
         content["benefits"] = extra.get("benefits") or []
         content["how_it_works"] = extra.get("how_it_works") or ""
 
     elif stype == "conclusion":
-        takeaways = extra.get("key_takeaways", bullets if bullets else [
-            "Clear market opportunity with proven demand",
-            "Differentiated technology with defensible moat",
-            "Strong unit economics & scalable GTM strategy",
-            "Experienced team ready to execute",
-        ])
+        if extra.get("key_takeaways"):
+            takeaways = extra["key_takeaways"]
+        elif bullets:
+            takeaways = bullets
+        elif brief and brief.key_points:
+            takeaways = [p.split("：")[0].split(":")[0].strip() for p in brief.key_points[:6]]
+        else:
+            takeaways = (
+                ["核心观点与关键结论", "数据支撑的决策建议", "下一步行动计划", "持续优化与跟进"]
+                if use_zh else
+                ["Key strategic insights and findings", "Data-backed recommendations", "Immediate next steps", "Long-term roadmap"]
+            )
         content["key_takeaways"] = takeaways[:6]
-        content["call_to_action"] = extra.get("call_to_action", "Let's Build the Future Together")
+        content["call_to_action"] = extra.get("call_to_action", "携手共创未来" if use_zh else "Let's Build the Future Together")
         content["subtitle"] = extra.get("subtitle", "")
 
     elif stype == "thank-you":
-        content["message"] = extra.get("message", intent.title if intent.title != "Thank You" else "Thank You")
-        content["subtitle"] = extra.get("subtitle", "We look forward to your questions")
+        content["message"] = extra.get("message", intent.title)
+        content["subtitle"] = extra.get("subtitle",
+            "感谢您的关注与支持" if use_zh else "We look forward to your questions")
         content["contact"] = extra.get("contact", "")
         content["email"] = extra.get("email", "")
         content["website"] = extra.get("website", "")
@@ -186,84 +278,82 @@ def _populate_slide_content(intent, brief=None):
         content["background_color"] = extra.get("background_color", "primary")
 
     elif stype == "timeline":
-        items = extra.get("milestones", bullets)
+        items = extra.get("milestones", None)
         if not items:
-            items = [
-                {"date": "Q1 2025", "event": "Discovery & Research Phase"},
-                {"date": "Q2 2025", "event": "MVP Development"},
-                {"date": "Q3 2025", "event": "Beta Launch & Testing"},
-                {"date": "Q4 2025", "event": "Market Rollout"},
-                {"date": "Q1 2026", "event": "Scale & Optimize"},
-            ]
-        content["milestones"] = items
+            items = _parse_timeline_items(key_msg, intent.title)
+        if not items:
+            items = [{"date": f"阶段{i+1}", "event": f"{intent.title}关键节点{i+1}"} for i in range(5)]
+        content["milestones"] = items[:6]
 
     elif stype == "process":
-        items = extra.get("steps", bullets)
+        items = extra.get("steps", None)
+        if not items and bullets:
+            items = [{"label": str(i+1), "name": b[:20], "description": b[:60]} for i, b in enumerate(bullets[:6])]
         if not items:
+            labels = "一二三四五六"
             items = [
-                {"label": "1", "name": "Discovery", "description": "Understand needs & gather requirements"},
-                {"label": "2", "name": "Design", "description": "Architect solution & create prototypes"},
-                {"label": "3", "name": "Develop", "description": "Build, test & iterate rapidly"},
-                {"label": "4", "name": "Deploy", "description": "Launch, monitor & continuously improve"},
+                {"label": labels[i] if i < len(labels) else str(i+1),
+                 "name": f"{intent.title}步骤{i+1}",
+                 "description": f"第{i+1}步关键环节"}
+                for i in range(4)
             ]
-        content["steps"] = items
+        content["steps"] = items[:6]
 
     elif stype == "workflow":
-        items = extra.get("steps", bullets)
+        items = extra.get("steps", None)
+        if not items and bullets:
+            items = [{"name": b[:20], "description": b[:60]} for b in bullets[:5]]
         if not items:
             items = [
-                {"name": "Input", "description": "Raw data ingestion"},
-                {"name": "Process", "description": "AI-powered analysis"},
-                {"name": "Output", "description": "Actionable insights"},
-                {"name": "Feedback", "description": "Continuous learning loop"},
+                {"name": "输入", "description": "数据与需求采集"},
+                {"name": "处理", "description": "分析与加工"},
+                {"name": "输出", "description": "成果交付"},
+                {"name": "反馈", "description": "持续优化迭代"},
             ]
-        content["steps"] = items
+        content["steps"] = items[:5]
 
     elif stype == "comparison":
-        content["left"] = extra.get("left", bullets[:3] if bullets else [
-            "Legacy approach: manual, slow, error-prone",
-            "High operational overhead & maintenance cost",
-            "Limited scalability & integration capabilities",
-        ])
-        content["right"] = extra.get("right", [
-            "Our approach: automated, fast, reliable",
-            "Lower TCO with cloud-native architecture",
-            "Enterprise-scale with seamless integrations",
-        ])
-        content["left_label"] = extra.get("left_label", "Traditional Approach")
-        content["right_label"] = extra.get("right_label", "Our Solution")
+        content["left"] = extra.get("left", bullets[:3] if bullets else (
+            ["传统模式：效率低、成本高", "信息孤岛、协同困难", "扩展性不足、响应滞后"] if use_zh else
+            ["Legacy approach: manual, slow, error-prone", "High operational overhead", "Limited scalability"]
+        ))
+        content["right"] = extra.get("right", (
+            ["新模式：高效、精准、智能", "数据互通、全面协同", "弹性扩展、快速响应"] if use_zh else
+            ["Modern approach: automated, fast, reliable", "Lower TCO with cloud-native architecture", "Enterprise-scale with seamless integrations"]
+        ))
+        content["left_label"] = extra.get("left_label", "传统方式" if use_zh else "Traditional")
+        content["right_label"] = extra.get("right_label", "创新方案" if use_zh else "Our Solution")
 
     elif stype == "before-after":
-        content["before_points"] = extra.get("before_points", bullets[:3] if bullets else [
-            "Disconnected data silos across departments",
-            "Reactive decision-making with 48-hour reporting lag",
-            "15% average patient readmission rate",
-        ])
-        content["after_points"] = extra.get("after_points", [
-            "Unified data platform with real-time dashboards",
-            "Predictive analytics enabling proactive intervention",
-            "Readmission rate reduced to under 10%",
-        ])
-        content["before_label"] = extra.get("before_label", "Before")
-        content["after_label"] = extra.get("after_label", "After")
+        content["before_points"] = extra.get("before_points", bullets[:3] if bullets else (
+            ["之前面临的问题与挑战", "效率与质量有待提升", "资源利用不够充分"] if use_zh else
+            ["Disconnected data silos", "Reactive decision-making", "High costs and inefficiency"]
+        ))
+        content["after_points"] = extra.get("after_points", (
+            ["显著改善与全面提升", "效率大幅提高", "资源优化配置完成"] if use_zh else
+            ["Unified platform with real-time dashboards", "Predictive analytics", "Cost reduction achieved"]
+        ))
+        content["before_label"] = extra.get("before_label", "改善前" if use_zh else "Before")
+        content["after_label"] = extra.get("after_label", "改善后" if use_zh else "After")
 
     elif stype == "roadmap":
-        items = extra.get("phases", [])
+        items = extra.get("phases", None)
+        if not items:
+            items = _parse_roadmap_phases(key_msg)
         if not items:
             items = [
-                {"name": "Phase 1", "timeline": "Q1-Q2", "description": "Foundation & MVP"},
-                {"name": "Phase 2", "timeline": "Q3-Q4", "description": "Beta & Early Customers"},
-                {"name": "Phase 3", "timeline": "Next Year", "description": "Scale & Market Expansion"},
+                {"name": f"第{i+1}阶段", "timeline": "", "description": f"{intent.title}规划第{i+1}步"}
+                for i in range(3)
             ]
-        content["phases"] = items
+        content["phases"] = items[:5]
 
     elif stype == "data-insight":
-        content["insight"] = extra.get("insight", key_msg or f"Key data insight: {intent.title}")
-        content["supporting_points"] = extra.get("supporting_points", bullets if bullets else [
-            "Data-driven evidence supports this conclusion",
-            "Statistical significance verified across cohorts",
-            "Trend analysis confirms sustained improvement",
-        ])
+        content["insight"] = extra.get("insight") or key_msg or intent.title
+        content["supporting_points"] = extra.get("supporting_points") or bullets or (
+            [p.strip() for p in key_msg.split("，") if p.strip() and len(p.strip()) > 3][:4]
+            if key_msg and use_zh else
+            ["Key metrics and indicators", "Trend analysis and patterns", "Actionable insights derived"]
+        )
         content["chart_data"] = extra.get("chart_data", {})
         content["source"] = extra.get("source", "")
 
@@ -274,62 +364,60 @@ def _populate_slide_content(intent, brief=None):
         content["source"] = extra.get("source", "")
 
     elif stype == "table":
-        content["headers"] = extra.get("headers", ["Category", "Value", "Change"])
+        content["headers"] = extra.get("headers", ["类别" if use_zh else "Category", "数据" if use_zh else "Value", "说明" if use_zh else "Notes"])
         content["rows"] = extra.get("rows", [["—", "—", "—"]])
         content["caption"] = extra.get("caption", key_msg)
 
     elif stype == "framework":
         content["framework_name"] = extra.get("framework_name", intent.title)
         components = extra.get("components", bullets if bullets else [
-            {"title": "Market Analysis", "description": "Size, growth, trends & competitive landscape"},
-            {"title": "Value Proposition", "description": "Unique differentiation & customer value"},
-            {"title": "Business Model", "description": "Revenue streams & unit economics"},
-            {"title": "Growth Strategy", "description": "GTM plan & expansion roadmap"},
+            {"title": f"{intent.title}维度{i+1}", "description": f"第{i+1}个核心要素"}
+            for i in range(4)
         ])
-        content["components"] = components
+        content["components"] = components[:5]
 
     elif stype == "architecture":
         content["layers"] = extra.get("layers", [
-            {"name": "Presentation", "description": "UI / Dashboard Layer"},
-            {"name": "Application", "description": "Business Logic & APIs"},
-            {"name": "Data", "description": "Storage, Processing & Analytics"},
-            {"name": "Infrastructure", "description": "Cloud, Security & DevOps"},
+            {"name": "表现层", "description": "用户界面与交互"},
+            {"name": "应用层", "description": "业务逻辑与API"},
+            {"name": "数据层", "description": "存储、处理与分析"},
+            {"name": "基础设施层", "description": "云服务、安全与运维"},
         ])
         content["components"] = extra.get("components", [])
         content["description"] = extra.get("description", key_msg)
 
     elif stype == "recommendation":
-        items = extra.get("recommendations", bullets if bullets else [
-            "Invest in AI/ML capabilities to maintain competitive edge",
-            "Expand into adjacent markets within 12 months",
-            "Build strategic partnerships for distribution",
-        ])
-        content["recommendations"] = items
+        items = extra.get("recommendations", bullets if bullets else (
+            ["加强核心能力建设", "拓展战略合作伙伴关系", "持续优化组织效能"] if use_zh else
+            ["Invest in core capabilities", "Expand strategic partnerships", "Optimize organizational effectiveness"]
+        ))
+        content["recommendations"] = items[:6]
         content["rationale"] = extra.get("rationale", key_msg)
         content["next_steps"] = extra.get("next_steps", [])
         content["priority"] = extra.get("priority", "high")
 
     elif stype == "risk":
         items = extra.get("risks", [
-            {"name": "Market Risk", "level": "Medium", "description": "Competitive pressure & market adoption speed"},
-            {"name": "Technology Risk", "level": "Low", "description": "Proven architecture with fallback options"},
-            {"name": "Execution Risk", "level": "Medium", "description": "Team scaling & operational complexity"},
+            {"name": "外部风险", "level": "中", "description": "外部环境变化带来的不确定性"},
+            {"name": "技术风险", "level": "低", "description": "技术方案成熟可靠，风险可控"},
+            {"name": "执行风险", "level": "中", "description": "组织协同与资源配置挑战"},
         ])
         content["risks"] = items
         content["mitigation"] = extra.get("mitigation", "")
 
     elif stype == "team":
-        content["members"] = extra.get("members", [
-            {"name": "Leadership", "role": "Executive Team", "bio": "Industry veterans with 20+ years experience"},
-            {"name": "Engineering", "role": "Tech Team", "bio": "Full-stack AI/ML engineering squad"},
-            {"name": "Advisory", "role": "Board", "bio": "Domain experts & strategic advisors"},
-        ])
+        items = extra.get("members", None)
+        if not items:
+            items = _parse_team_members(key_msg)
+        if not items:
+            items = [{"name": f"{intent.title}成员{i+1}", "role": "核心成员", "bio": "专业背景深厚，经验丰富"} for i in range(3)]
+        content["members"] = items[:6]
 
     elif stype == "case-study":
-        content["company"] = extra.get("company", "Example Corp")
-        content["challenge"] = extra.get("challenge", key_msg or "The client faced significant challenges...")
-        content["solution"] = extra.get("solution", "Our team deployed a customized solution...")
-        content["results"] = extra.get("results", ["Result 1: 30% improvement", "Result 2: 50% cost reduction"])
+        content["company"] = extra.get("company", intent.title)
+        content["challenge"] = extra.get("challenge", key_msg or "面临的核心挑战")
+        content["solution"] = extra.get("solution", "系统性解决方案")
+        content["results"] = extra.get("results", ["显著成效", "持续改善", "广泛认可"])
 
     elif stype == "quote":
         content["quote_text"] = extra.get("quote_text", key_msg or intent.title)
@@ -342,7 +430,6 @@ def _populate_slide_content(intent, brief=None):
         content["type"] = extra.get("type", "reference")
         content["reference"] = extra.get("reference", "")
 
-    # Merge any remaining extra fields not explicitly handled
     for k, v in extra.items():
         if k not in content:
             content[k] = v
