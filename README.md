@@ -7,7 +7,7 @@
 <p align="center">
   <img src="https://img.shields.io/badge/version-0.2.0-blue" alt="version">
   <img src="https://img.shields.io/badge/python-3.10%2B-green" alt="python">
-  <img src="https://img.shields.io/badge/platform-macOS-lightgrey" alt="platform">
+  <img src="https://img.shields.io/badge/platform-macOS/Windows-lightgrey" alt="platform">
   <img src="https://img.shields.io/badge/slide_types-25-orange" alt="slide types">
   <img src="https://img.shields.io/badge/themes-7-purple" alt="themes">
 </p>
