@@ -25,28 +25,6 @@ repairs defects automatically.
 
 ---
 
-## 🏗 Architecture
-
-```mermaid
-flowchart LR
-    A[💬 User Text] --> B[🧠 Brief Parser]
-    B --> C[📖 Story Planner]
-    C --> D[📋 Outline Builder]
-    D --> E[🏷 Intent Classifier]
-    E --> F[🎨 Slide Types × Theme]
-    F --> G[📐 Layout Engine]
-    G --> H[🖼 SceneGraph]
-    H --> I[⚡ PowerPoint Renderer]
-    I --> J[🔍 QA Engine]
-    J --> K{Pass?}
-    K -->|No| L[🔧 Repair Engine]
-    L --> I
-    K -->|Yes| M[✅ Final PPTX]
-    H --> N[👁 Vision Review]
-    I --> N
-    N --> J
-```
-
 ## ✨ Features
 
 | Category | Capability |
@@ -465,8 +443,3 @@ broken slides.
 
 MIT
 
----
-
-<p align="center">
-  <sub>Built with ❤️ for AI agents and presentation creators</sub>
-</p>
